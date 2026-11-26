@@ -212,6 +212,18 @@ release APK を `aapt dump permissions` で実測した結果は次のとおり�
 - **`RECORD_AUDIO`（マイク）は要求しない。** `camera` プラグインが動画撮影用に無条件で宣言するが、本アプリは静止画しか撮らないため `tools:node="remove"` で落としている。
 - **`READ_EXTERNAL_STORAGE` / `WRITE_EXTERNAL_STORAGE` も要求しない。** 画像の取り込みは OS のファイル選択（Photo Picker / `ACTION_GET_CONTENT`）経由で、返却された URI に一時的な読み取り権限が付くため不要である。
 
+## 同梱フォントとライセンス
+
+画面表示には **BIZ UDPGothic** を同梱して使っている（`assets/fonts/`）。
+
+- BIZ UDPGothic — Copyright 2022 The BIZ UDGothic Project Authors
+- ライセンス: SIL Open Font License 1.1（全文は `assets/fonts/OFL.txt`。APK 内にも同梱）
+
+端末の CJK フォントフォールバックに任せると、漢字が**簡体字字形**で描画される端末がある
+（直・骨・次・令 などで顕著）。これを避けるため、日本語字形を持つフォントを同梱して固定し、
+併せて `MaterialApp` の `locale` を `ja` に宣言している。OFL 1.1 はアプリへの埋め込みを許諾し、
+アプリ本体のソース公開は要求しない（ライセンス全文の同梱が条件）。
+
 ## 無保証であることの注記
 
 - 本ソフトウェアは**現状有姿（as-is）で提供される。明示・黙示を問わず、いかなる保証も行わない。** 動作の正確性、特定目的への適合性、記録データが失われないことを含め、一切保証しない。

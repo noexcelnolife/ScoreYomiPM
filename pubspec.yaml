@@ -97,6 +97,20 @@ flutter:
     # tool/generate_ac_anchor_templates.dart が生成）。未宣言だと
     # AnchorPack.loadFromAssets('ac_v1') が失敗して機能 OFF になる。
     - assets/anchors/ac_v1/
+    # SIL OFL 1.1 の条件により、同梱フォントのライセンス全文を配布物に含める。
+    - assets/fonts/OFL.txt
+
+  fonts:
+    # BIZ UDPGothic（SIL OFL 1.1 / Copyright 2022 The BIZ UDGothic Project Authors）。
+    # WHY 同梱するか: 端末の CJK フォールバック任せだと簡体字字形が出る端末がある。
+    # フォントを固定すれば全端末で日本語字形が一致する。UD 設計のため数字の識別も良い。
+    # 提供ウェイトは Regular / Bold の 2 種のみ（中間ウェイトは Flutter が補間する）。
+    - family: BIZUDPGothic
+      fonts:
+        - asset: assets/fonts/BIZUDPGothic-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/BIZUDPGothic-Bold.ttf
+          weight: 700
 
   # To add assets to your application, add an assets section, like this:
   # assets:

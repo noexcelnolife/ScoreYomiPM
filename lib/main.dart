@@ -101,9 +101,20 @@ class ScoremanApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'スコアヨミPM',
+      // WHY: 日本語専用アプリなので ja を明示する。宣言しないと MaterialApp の
+      // 既定 supportedLocales が en_US のままになり、Android の CJK フォールバックが
+      // 簡体字（SC）を選ぶため、漢字が中国語字形で描画される（直・骨・次・令 などで顕著）。
+      // locale 単独では MaterialLocalizations が無くて落ちるので delegates と
+      // supportedLocales を必ず対で指定する。
+      locale: const Locale('ja'),
+      supportedLocales: const <Locale>[Locale('ja')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+        // WHY: ロケール指定だけでは端末のフォント資産に依存する。同梱フォントを
+        // 既定に固定すれば、CJK の JP 字形を持たない ROM でも字形が変わらない。
+        fontFamily: 'BIZUDPGothic',
       ),
       home: HomeScreen(
         ocrEngine: ocrEngine,
