@@ -12,6 +12,7 @@ class BackupManifest {
     required this.exportedAt,
     required this.recordCount,
     required this.imageCount,
+    this.templateCount = 0,
     this.format = backupFormat,
     this.schemaVersion = currentSchemaVersion,
   });
@@ -30,6 +31,13 @@ class BackupManifest {
   final int recordCount;
   final int imageCount;
 
+  /// 同梱したメモテンプレートの件数。
+  ///
+  /// WHY 省略可能（既定 0）か: テンプレート同梱より前に作られた ZIP には
+  /// このキーが無い。無いだけで復元を失敗させるのは過剰なので、欠落は 0 として
+  /// 読み、records/画像の復元はそのまま続行する（前方互換）。
+  final int templateCount;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     'format': format,
     'schemaVersion': schemaVersion,
@@ -38,6 +46,7 @@ class BackupManifest {
     'exportedAt': exportedAt.toUtc().toIso8601String(),
     'recordCount': recordCount,
     'imageCount': imageCount,
+    'templateCount': templateCount,
   };
 
   /// JSON から読む。未知キーは読み捨て、型不一致は [BackupFormatException]。
@@ -49,7 +58,16 @@ class BackupManifest {
       exportedAt: _readDateTime(json, 'exportedAt'),
       recordCount: _readInt(json, 'recordCount'),
       imageCount: _readInt(json, 'imageCount'),
+      templateCount: _readIntOr(json, 'templateCount', 0),
     );
+  }
+
+  /// 省略可能な整数を読む（欠落は [fallback]、型不一致は明確に拒否）。
+  static int _readIntOr(Map<String, dynamic> json, String key, int fallback) {
+    if (!json.containsKey(key)) {
+      return fallback;
+    }
+    return _readInt(json, key);
   }
 
   static String _readString(Map<String, dynamic> json, String key) {

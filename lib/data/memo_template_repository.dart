@@ -25,6 +25,14 @@ abstract class MemoTemplateRepository {
 
   /// 指定 id を削除する（未知の id は無音で成功・冪等）。
   Future<void> delete(String id);
+
+  /// バックアップ由来のテンプレートを**追加のみ**で取り込む（戻り値は追加件数）。
+  ///
+  /// 既に同じ id があれば何もしない（同じ ZIP を 2 回復元しても重複しない）。
+  /// 既存テンプレートは削除しない。WHY: 「復元」は記録側こそ全消しの選択肢があるが、
+  /// テンプレートは記録とは別に育てた入力補助で、記録の復元に巻き込んで消すのは
+  /// 利用者の意図から外れやすい。
+  Future<int> mergeAll(List<MemoTemplate> templates);
 }
 
 /// ファイルベースの [MemoTemplateRepository] 実装。
@@ -97,6 +105,29 @@ class FileMemoTemplateRepository implements MemoTemplateRepository {
       return;
     }
     await _writeAll(dir, templates);
+  }
+
+  @override
+  Future<int> mergeAll(List<MemoTemplate> templates) async {
+    if (templates.isEmpty) {
+      return 0;
+    }
+    final Directory dir = await _templatesDirectory();
+    final List<MemoTemplate> existing = await _readAll(dir);
+    final Set<String> existingIds = <String>{
+      for (final MemoTemplate item in existing) item.id,
+    };
+    final List<MemoTemplate> added = templates
+        // Set.add が true を返す＝まだ無い id。ZIP 内での id 重複も同時に落とせる。
+        .where((MemoTemplate item) => existingIds.add(item.id))
+        .toList();
+    if (added.isEmpty) {
+      return 0;
+    }
+    // WHY 1 回だけ書くか: 件数分の書き込みは途中失敗で半端な状態を作りうる。
+    // 追記分をまとめてアトミックに書き切る。
+    await _writeAll(dir, <MemoTemplate>[...existing, ...added]);
+    return added.length;
   }
 
   Future<Directory> _templatesDirectory() async {

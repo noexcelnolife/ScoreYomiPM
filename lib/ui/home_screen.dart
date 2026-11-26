@@ -714,6 +714,9 @@ class _HomeScreenState extends State<HomeScreen> {
       importService = BackupImportService(
         listRecords: repository.listAll,
         writer: repository as PlayRecordBulkWriter,
+        // メモのテンプレートは記録とは別のファイルなので、専用の repository を
+        // 渡さない限り ZIP に同梱されない（null なら従来どおり記録のみ）。
+        memoTemplateRepository: widget.memoTemplateRepository,
       );
     } else {
       importService = null;
@@ -723,6 +726,7 @@ class _HomeScreenState extends State<HomeScreen> {
         exportService: BackupExportService(
           repository: repository,
           appVersion: kAppVersion,
+          memoTemplateRepository: widget.memoTemplateRepository,
         ),
         fileGateway: const PlatformFileExportGateway(),
         importService: importService,

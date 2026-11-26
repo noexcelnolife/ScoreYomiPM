@@ -8,11 +8,14 @@
 //   manifest.json           … 形式・スキーマ版・件数の宣言
 //   records.json            … PlayRecord の JSON 配列（resultImagePath は相対パス）
 //   images/<id>.<ext>       … リザルト画像（JPEG/PNG は再圧縮せず格納）
+//   memo_templates.json     … メモのテンプレート配列（任意・旧 ZIP には無い）
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 
+import '../data/memo_template.dart';
 import '../data/play_record.dart';
 import 'backup_format_exception.dart';
 import 'backup_manifest.dart';
@@ -29,6 +32,7 @@ class BackupArchive {
     required this.records,
     required this.imagesById,
     required this.warnings,
+    this.templates = const <MemoTemplate>[],
   });
 
   final BackupManifest manifest;
@@ -41,6 +45,12 @@ class BackupArchive {
 
   /// 復元を止めずに継続した事象（画像欠落など）の説明。
   final List<String> warnings;
+
+  /// 同梱されていたメモのテンプレート（無ければ空）。
+  ///
+  /// WHY 空を既定にするか: テンプレート同梱前の ZIP でも同じ経路で復元したい
+  /// （「テンプレートが無い」は異常ではなく、単に同梱されていないだけ）。
+  final List<MemoTemplate> templates;
 }
 
 /// バックアップ ZIP のエンコーダ兼デコーダ。
@@ -50,6 +60,7 @@ class BackupArchiveCodec {
   static const String manifestFileName = 'manifest.json';
   static const String recordsFileName = 'records.json';
   static const String imagesDirectoryName = 'images';
+  static const String memoTemplatesFileName = 'memo_templates.json';
 
   /// レコードと画像を ZIP バイト列へ変換する。
   ///
@@ -59,6 +70,7 @@ class BackupArchiveCodec {
     required BackupManifest manifest,
     required List<PlayRecord> records,
     required Map<String, Uint8List> imagesById,
+    List<MemoTemplate> templates = const <MemoTemplate>[],
   }) {
     final Map<String, String> relativePathByRecordId = _relativePaths(
       imagesById.keys,
@@ -69,6 +81,11 @@ class BackupArchiveCodec {
     _addJsonEntry(archive, recordsFileName, <Map<String, dynamic>>[
       for (final PlayRecord record in records)
         _recordJson(record, relativePathByRecordId),
+    ]);
+    // WHY 空でも書くか: 「テンプレート 0 件」を明示でき、ZIP の中身が
+    // 件数によらず一定になる（利用者が中を開いたときに有無が分かる）。
+    _addJsonEntry(archive, memoTemplatesFileName, <Map<String, dynamic>>[
+      for (final MemoTemplate template in templates) template.toJson(),
     ]);
 
     for (final MapEntry<String, Uint8List> entry in imagesById.entries) {
@@ -106,7 +123,52 @@ class BackupArchiveCodec {
       records: records,
       imagesById: imagesById,
       warnings: warnings,
+      templates: _readMemoTemplates(archive, warnings),
     );
+  }
+
+  /// `memo_templates.json` を読む（無ければ空・壊れていても復元は続行）。
+  ///
+  /// WHY 例外にしないか: テンプレートは入力の補助データであり、その 1 ファイルの
+  /// 破損で記録（本体データ）の復元を止めるのは釣り合わない。破損は warnings に
+  /// 積んで利用者に知らせる。
+  List<MemoTemplate> _readMemoTemplates(
+    Archive archive,
+    List<String> warnings,
+  ) {
+    final ArchiveFile? file = archive.find(memoTemplatesFileName);
+    if (file == null) {
+      return const <MemoTemplate>[];
+    }
+    final dynamic decoded;
+    try {
+      decoded = _decodeJson(file, memoTemplatesFileName);
+    } on BackupFormatException catch (error) {
+      warnings.add('$memoTemplatesFileName を読み取れないため、メモのテンプレートは復元しません。');
+      developer.log(
+        '$memoTemplatesFileName の復号に失敗: $error',
+        name: 'backup_archive_codec',
+      );
+      return const <MemoTemplate>[];
+    }
+    if (decoded is! List) {
+      warnings.add('$memoTemplatesFileName の形式が不正なため、メモのテンプレートは復元しません。');
+      return const <MemoTemplate>[];
+    }
+    final List<MemoTemplate> templates = <MemoTemplate>[];
+    for (final dynamic entry in decoded) {
+      if (entry is! Map<String, dynamic>) {
+        continue;
+      }
+      try {
+        templates.add(MemoTemplate.fromJson(entry));
+      } on FormatException catch (error) {
+        // 1 件単位の不備はスキップ（records.json と同じ方針）。
+        warnings.add('不正なメモのテンプレートを 1 件スキップしました。');
+        developer.log('不正なメモテンプレート: $error', name: 'backup_archive_codec');
+      }
+    }
+    return templates;
   }
 
   Map<String, String> _relativePaths(Iterable<String> imageFileNames) {

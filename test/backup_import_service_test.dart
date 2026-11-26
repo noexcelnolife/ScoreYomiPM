@@ -12,6 +12,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:scoreyomipm/backup/backup_archive_codec.dart';
 import 'package:scoreyomipm/backup/backup_export_service.dart';
 import 'package:scoreyomipm/backup/backup_import_service.dart';
+import 'package:scoreyomipm/data/memo_template.dart';
+import 'package:scoreyomipm/data/memo_template_repository.dart';
 import 'package:scoreyomipm/data/play_record.dart';
 import 'package:scoreyomipm/data/play_record_repository.dart';
 
@@ -202,4 +204,168 @@ void main() {
     expect(csv, contains('画像あり'));
     expect(csv, contains('画像なし'));
   });
+
+  group('メモのテンプレート', () {
+    late FileMemoTemplateRepository templatesA;
+    late FileMemoTemplateRepository templatesB;
+
+    setUp(() {
+      templatesA = FileMemoTemplateRepository(
+        documentsDirectoryResolver: () async => tempDirA,
+      );
+      templatesB = FileMemoTemplateRepository(
+        documentsDirectoryResolver: () async => tempDirB,
+      );
+    });
+
+    BackupImportService buildServiceWithTemplates(
+      FilePlayRecordRepository repository, {
+      MemoTemplateRepository? templates,
+    }) {
+      return BackupImportService(
+        listRecords: repository.listAll,
+        writer: repository,
+        memoTemplateRepository: templates ?? templatesB,
+      );
+    }
+
+    /// 端末 A のテンプレート 2 件を含む ZIP を作る（レコードは 2 件）。
+    Future<Uint8List> buildZipWithTemplates() async {
+      await buildZipFromA(); // 端末 A にレコードを用意する。
+      await templatesA.add(title: '要復習', body: '要復習です');
+      await templatesA.add(title: '精度重視', body: '精度重視で');
+
+      return BackupExportService(
+        repository: repoA,
+        appVersion: '1.4.0+6',
+        memoTemplateRepository: templatesA,
+      ).buildZip();
+    }
+
+    test('ZIP に同梱され、プレビューと復元結果に件数が出る', () async {
+      final Uint8List zip = await buildZipWithTemplates();
+
+      final BackupImportPreview preview = await buildServiceWithTemplates(repoB)
+          .preview(zip);
+      final BackupImportOutcome outcome = await buildServiceWithTemplates(repoB)
+          .apply(zip, mode: ImportMode.merge);
+
+      expect(preview.templateCount, 2);
+      expect(preview.manifest.templateCount, 2);
+      expect(outcome.templatesImported, 2);
+
+      final List<MemoTemplate> restored = await templatesB.listAll();
+
+      expect(restored.map((MemoTemplate t) => t.title), <String>[
+        '要復習',
+        '精度重視',
+      ]);
+      expect(restored.first.body, '要復習です');
+    });
+
+    test('復元は追加のみで、2 回当てても増えない', () async {
+      final Uint8List zip = await buildZipWithTemplates();
+      await templatesB.add(title: '端末 B の既存', body: '消えては困る');
+
+      final BackupImportOutcome first = await buildServiceWithTemplates(repoB)
+          .apply(zip, mode: ImportMode.merge);
+      final BackupImportOutcome second = await buildServiceWithTemplates(repoB)
+          .apply(zip, mode: ImportMode.merge);
+
+      expect(first.templatesImported, 2);
+      expect(second.templatesImported, 0);
+
+      final List<MemoTemplate> all = await templatesB.listAll();
+
+      expect(all.length, 3);
+      expect(all.map((MemoTemplate t) => t.title), contains('端末 B の既存'));
+    });
+
+    test('全置換でもテンプレートは消さない（追加のみ）', () async {
+      // WHY: テンプレートは「ZIP に無い版がある」うえ、記録の全置換に
+      // つられて消えると手元のプリセットが黙って失われる。
+      final Uint8List zip = await buildZipWithTemplates();
+      await templatesB.add(title: '端末 B の既存', body: '消えては困る');
+
+      await buildServiceWithTemplates(repoB)
+          .apply(zip, mode: ImportMode.replace);
+
+      final List<MemoTemplate> all = await templatesB.listAll();
+
+      expect(all.length, 3);
+      expect(all.map((MemoTemplate t) => t.title), contains('端末 B の既存'));
+    });
+
+    test('テンプレートを持たない旧 ZIP でもレコードは復元できる', () async {
+      final Uint8List zip = await buildZipFromA();
+
+      final BackupImportOutcome outcome = await buildServiceWithTemplates(repoB)
+          .apply(zip, mode: ImportMode.merge);
+
+      expect(outcome.imported, 2);
+      expect(outcome.templatesImported, 0);
+      expect(await templatesB.listAll(), isEmpty);
+    });
+
+    test('テンプレートの復元に失敗してもレコードは復元済みのまま返る', () async {
+      // WHY: 記録の復元は既に成功している。テンプレートだけの失敗で
+      // 例外を投げると「何も復元できなかった」と誤解される。
+      final Uint8List zip = await buildZipWithTemplates();
+      final BackupImportService service = buildServiceWithTemplates(
+        repoB,
+        templates: _ThrowingMemoTemplateRepository(),
+      );
+
+      final BackupImportOutcome outcome = await service.apply(
+        zip,
+        mode: ImportMode.merge,
+      );
+
+      expect(outcome.imported, 2);
+      expect(outcome.templatesImported, 0);
+      expect((await repoB.listAll()).length, 2);
+    });
+
+    test('テンプレートの復元先が未設定なら何もしない', () async {
+      final Uint8List zip = await buildZipWithTemplates();
+      final BackupImportService service = BackupImportService(
+        listRecords: repoB.listAll,
+        writer: repoB,
+      );
+
+      final BackupImportOutcome outcome = await service.apply(
+        zip,
+        mode: ImportMode.merge,
+      );
+
+      expect(outcome.imported, 2);
+      expect(outcome.templatesImported, 0);
+      expect(await templatesB.listAll(), isEmpty);
+    });
+  });
+}
+
+/// 復元失敗時の縮退を確かめるための、必ず例外を投げる repository。
+class _ThrowingMemoTemplateRepository implements MemoTemplateRepository {
+  @override
+  Future<List<MemoTemplate>> listAll() async =>
+      throw const FileSystemException('読めない');
+
+  @override
+  Future<MemoTemplate> add({
+    required String title,
+    required String body,
+  }) async => throw const FileSystemException('書けない');
+
+  @override
+  Future<MemoTemplate> update(MemoTemplate template) async =>
+      throw const FileSystemException('書けない');
+
+  @override
+  Future<void> delete(String id) async =>
+      throw const FileSystemException('書けない');
+
+  @override
+  Future<int> mergeAll(List<MemoTemplate> templates) async =>
+      throw const FileSystemException('書けない');
 }

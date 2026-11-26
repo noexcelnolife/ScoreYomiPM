@@ -6,6 +6,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../data/memo_template.dart';
+import '../data/memo_template_repository.dart';
 import '../data/play_record.dart';
 import '../data/play_record_repository.dart';
 import 'backup_archive_codec.dart';
@@ -17,6 +19,7 @@ class BackupExportService {
   BackupExportService({
     required this._repository,
     required this._appVersion,
+    this._memoTemplateRepository,
     this._codec = const BackupArchiveCodec(),
     this._csvEncoder = const BackupCsvEncoder(),
     this._clock = DateTime.now,
@@ -28,10 +31,18 @@ class BackupExportService {
   final BackupCsvEncoder _csvEncoder;
   final DateTime Function() _clock;
 
-  /// 全レコードと画像を ZIP バイト列にする。
+  /// メモのテンプレート供給元（null ならテンプレートを同梱しない）。
+  ///
+  /// WHY null 許容か: テンプレートは入力の補助データで、無くても ZIP は成立する。
+  /// 既存の呼び出し側・テストを壊さない後方互換のため任意注入にする。
+  final MemoTemplateRepository? _memoTemplateRepository;
+
+  /// 全レコードと画像（とメモのテンプレート）を ZIP バイト列にする。
   Future<Uint8List> buildZip() async {
     final List<PlayRecord> records = await _repository.listAll();
     final Map<String, Uint8List> imagesById = await _loadImages(records);
+    final List<MemoTemplate> templates =
+        await _memoTemplateRepository?.listAll() ?? const <MemoTemplate>[];
 
     return _codec.encode(
       manifest: BackupManifest(
@@ -39,9 +50,11 @@ class BackupExportService {
         exportedAt: _clock(),
         recordCount: records.length,
         imageCount: imagesById.length,
+        templateCount: templates.length,
       ),
       records: records,
       imagesById: imagesById,
+      templates: templates,
     );
   }
 

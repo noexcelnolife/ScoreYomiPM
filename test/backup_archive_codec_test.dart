@@ -11,6 +11,7 @@ import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scoreyomipm/backup/backup_archive_codec.dart';
 import 'package:scoreyomipm/backup/backup_manifest.dart';
+import 'package:scoreyomipm/data/memo_template.dart';
 import 'package:scoreyomipm/data/play_record.dart';
 
 /// テスト用の最小レコード（画像なし）。
@@ -39,13 +40,27 @@ PlayRecord buildRecord({
   );
 }
 
-BackupManifest buildManifest({int recordCount = 0, int imageCount = 0}) {
+BackupManifest buildManifest({
+  int recordCount = 0,
+  int imageCount = 0,
+  int templateCount = 0,
+}) {
   return BackupManifest(
     appVersion: '1.4.0+6',
     exportedAt: DateTime.utc(2026, 11, 23, 12),
     recordCount: recordCount,
     imageCount: imageCount,
+    templateCount: templateCount,
   );
+}
+
+/// テスト用の最小テンプレート。
+MemoTemplate buildTemplate({
+  String id = 't1',
+  String title = '要復習',
+  String body = '要復習です',
+}) {
+  return MemoTemplate(id: id, title: title, body: body);
 }
 
 /// 生の ZIP を組み立てる（拒否系テスト用に任意の内容を流し込む）。
@@ -266,6 +281,114 @@ void main() {
     });
   });
 
+  group('メモのテンプレート', () {
+    test('encode したテンプレートは decode で同じ内容に戻る', () {
+      final Uint8List bytes = codec.encode(
+        manifest: buildManifest(templateCount: 2),
+        records: <PlayRecord>[],
+        imagesById: <String, Uint8List>{},
+        templates: <MemoTemplate>[
+          buildTemplate(id: 't1', title: '要復習', body: '要復習です'),
+          buildTemplate(id: 't2', title: '精度重視', body: '精度重視で'),
+        ],
+      );
+
+      final BackupArchive archive = codec.decode(bytes);
+
+      expect(archive.templates.map((MemoTemplate t) => t.id), <String>[
+        't1',
+        't2',
+      ]);
+      expect(archive.templates.first.title, '要復習');
+      expect(archive.templates.last.body, '精度重視で');
+      expect(archive.manifest.templateCount, 2);
+      expect(archive.warnings, isEmpty);
+    });
+
+    test('テンプレート 0 件でも空配列として書き出し、警告なく読める', () {
+      // WHY 空でも書くか: 「このバックアップにはテンプレートが無い」と
+      // 「テンプレートという概念が無い版の ZIP」を区別できる。
+      final Uint8List bytes = codec.encode(
+        manifest: buildManifest(),
+        records: <PlayRecord>[],
+        imagesById: <String, Uint8List>{},
+      );
+
+      final Archive raw = ZipDecoder().decodeBytes(bytes);
+
+      expect(raw.find('memo_templates.json'), isNotNull);
+      expect(utf8.decode(raw.find('memo_templates.json')!.content), '[]');
+
+      final BackupArchive archive = codec.decode(bytes);
+
+      expect(archive.templates, isEmpty);
+      expect(archive.warnings, isEmpty);
+      expect(archive.manifest.templateCount, 0);
+    });
+
+    test('memo_templates.json が無い旧 ZIP でもレコードは復元できる', () {
+      final Uint8List bytes = buildRawZip(<String, List<int>>{
+        'manifest.json': utf8.encode(jsonEncode(buildManifest().toJson())),
+        'records.json': utf8.encode(
+          jsonEncode(<Map<String, dynamic>>[buildRecord(id: 'r1').toJson()]),
+        ),
+      });
+
+      final BackupArchive archive = codec.decode(bytes);
+
+      expect(archive.records.single.id, 'r1');
+      expect(archive.templates, isEmpty);
+      expect(archive.warnings, isEmpty);
+      expect(archive.manifest.templateCount, 0);
+    });
+
+    test('壊れた memo_templates.json は警告に積み、レコードは復元する', () {
+      final Uint8List bytes = buildRawZip(<String, List<int>>{
+        'manifest.json': utf8.encode(jsonEncode(buildManifest().toJson())),
+        'records.json': utf8.encode(
+          jsonEncode(<Map<String, dynamic>>[buildRecord(id: 'r1').toJson()]),
+        ),
+        'memo_templates.json': utf8.encode('{壊れた'),
+      });
+
+      final BackupArchive archive = codec.decode(bytes);
+
+      expect(archive.records.single.id, 'r1');
+      expect(archive.templates, isEmpty);
+      expect(archive.warnings.single, contains('memo_templates.json'));
+    });
+
+    test('配列でない memo_templates.json は警告に積む', () {
+      final Uint8List bytes = buildRawZip(<String, List<int>>{
+        'manifest.json': utf8.encode(jsonEncode(buildManifest().toJson())),
+        'records.json': utf8.encode(jsonEncode(<Map<String, dynamic>>[])),
+        'memo_templates.json': utf8.encode('{"templates": []}'),
+      });
+
+      final BackupArchive archive = codec.decode(bytes);
+
+      expect(archive.templates, isEmpty);
+      expect(archive.warnings.single, contains('memo_templates.json'));
+    });
+
+    test('必須項目が欠けた 1 件だけを捨て、他は読む', () {
+      final Uint8List bytes = buildRawZip(<String, List<int>>{
+        'manifest.json': utf8.encode(jsonEncode(buildManifest().toJson())),
+        'records.json': utf8.encode(jsonEncode(<Map<String, dynamic>>[])),
+        'memo_templates.json': utf8.encode(
+          jsonEncode(<Map<String, dynamic>>[
+            <String, dynamic>{'id': 't1', 'title': '', 'body': '本文'},
+            <String, dynamic>{'id': 't2', 'title': '名前', 'body': '本文'},
+          ]),
+        ),
+      });
+
+      final BackupArchive archive = codec.decode(bytes);
+
+      expect(archive.templates.map((MemoTemplate t) => t.id), <String>['t2']);
+    });
+  });
+
   group('manifest', () {
     test('toJson は仕様どおりのキーと値を持つ', () {
       final Map<String, dynamic> json = buildManifest(
@@ -279,6 +402,7 @@ void main() {
       expect(json['exportedAt'], '2026-11-23T12:00:00.000Z');
       expect(json['recordCount'], 3);
       expect(json['imageCount'], 2);
+      expect(json['templateCount'], 0);
     });
 
     test('fromJson は未知キーを無視し、既知キーだけを読む', () {
@@ -294,6 +418,19 @@ void main() {
 
       expect(manifest.recordCount, 3);
       expect(manifest.exportedAt.toUtc(), DateTime.utc(2026, 11, 23, 12));
+    });
+
+    test('templateCount が無い旧 manifest は 0 として読む', () {
+      final BackupManifest manifest = BackupManifest.fromJson(<String, dynamic>{
+        'format': 'scoreyomipm.backup',
+        'schemaVersion': 1,
+        'appVersion': '1.4.0+6',
+        'exportedAt': '2026-11-23T12:00:00.000Z',
+        'recordCount': 3,
+        'imageCount': 2,
+      });
+
+      expect(manifest.templateCount, 0);
     });
 
     test('fromJson は型不一致を明示エラーにする（黙って既定値に落とさない）', () {

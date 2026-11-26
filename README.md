@@ -139,7 +139,7 @@ HCのリザルトをカメラで読み取り、保存し、ホーム画面に戻
 | 機能 | 内容 |
 | --- | --- |
 | 収録曲辞書 | 曲名候補と総ノーツ数の照合に使う辞書。配信 URL を設定すると辞書を取得・更新できる。追加の辞書ファイルの取り込みにも対応。読み込み状態と版、直近の更新結果を画面に表示する |
-| バックアップ | ZIP（画像込み）または CSV（画像なし）で書き出し。メモも含む（メモのテンプレートは含まない） |
+| バックアップ | ZIP（画像・メモ・メモのテンプレート込み）または CSV（画像なし）で書き出し。復元は記録を上書きせず、テンプレートは追加のみ |
 | 復元 | ZIP から復元（追加 / 置換を選択、取り込み前のプレビュー、重複のスキップ） |
 
 ### その他
@@ -174,7 +174,7 @@ flutter run
 flutter build apk --release
 ```
 
-出力は `build/app/outputs/flutter-apk/app-release.apk`。AAB が必要な場合は `flutter build appbundle`（出力は `build/app/outputs/bundle/release/app-release.aab`）。バージョンは `pubspec.yaml` の `version`（現在 `1.0.1+2`）がそのまま `versionName` / `versionCode` になる。
+出力は `build/app/outputs/flutter-apk/app-release.apk`。AAB が必要な場合は `flutter build appbundle`（出力は `build/app/outputs/bundle/release/app-release.aab`）。バージョンは `pubspec.yaml` の `version`（現在 `1.0.2+3`）がそのまま `versionName` / `versionCode` になる。
 
 ### リリースビルドに関する注意
 

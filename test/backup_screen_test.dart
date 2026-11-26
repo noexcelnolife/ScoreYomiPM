@@ -287,6 +287,7 @@ void main() {
     );
     expect(find.text('記録: 2 件'), findsOneWidget);
     expect(find.text('重複（既存と同一）: 1 件'), findsOneWidget);
+    expect(find.text('メモのテンプレート: 0 件'), findsOneWidget);
     expect(find.text('既存の記録: 1 件'), findsOneWidget);
     expect(find.text('アプリ版: $kAppVersion'), findsOneWidget);
   });
@@ -310,7 +311,7 @@ void main() {
     expect(find.text('復元する'), findsNothing);
   });
 
-  testWidgets('インポート成功で結果ダイアログに 4 つの数値が出る', (WidgetTester tester) async {
+  testWidgets('インポート成功で結果ダイアログに 5 つの数値が出る', (WidgetTester tester) async {
     final _Harness harness = _harness(
       exportRecords: <PlayRecord>[_record('r1'), _record('r2')],
     );
@@ -331,6 +332,7 @@ void main() {
     expect(find.text('スキップ: 0 件'), findsOneWidget);
     expect(find.text('画像復元: 0 枚'), findsOneWidget);
     expect(find.text('画像欠落: 0 件'), findsOneWidget);
+    expect(find.text('テンプレート追加: 0 件'), findsOneWidget);
     // 既定は「追加」なので replaceAll は false で渡る。
     expect(harness.writer.lastReplaceAll, isFalse);
   });

@@ -173,6 +173,77 @@ void main() {
     });
   });
 
+  group('mergeAll', () {
+    test('空リストなら何も書かず 0 を返す', () async {
+      final FileMemoTemplateRepository repository = createRepository();
+
+      expect(await repository.mergeAll(<MemoTemplate>[]), 0);
+      expect(await templatesFile().exists(), isFalse);
+    });
+
+    test('既存と重ならないものだけを追加し、件数を返す', () async {
+      final FileMemoTemplateRepository repository = createRepository();
+      final MemoTemplate existing = await repository.add(
+        title: '既存',
+        body: '既存の本文',
+      );
+
+      final int added = await repository.mergeAll(<MemoTemplate>[
+        existing,
+        const MemoTemplate(id: 'zip-1', title: '取り込み', body: '取り込み本文'),
+        const MemoTemplate(id: 'zip-1', title: '重複', body: 'ZIP 内の重複'),
+      ]);
+
+      final List<MemoTemplate> all = await repository.listAll();
+
+      // 既存 id と ZIP 内の重複 id の両方を落とし、増えるのは 1 件だけ。
+      expect(added, 1);
+      expect(all.map((MemoTemplate t) => t.id), <String>[existing.id, 'zip-1']);
+      expect(all.first.title, '既存');
+      expect(all.last.body, '取り込み本文');
+    });
+
+    test('同じリストを 2 回流しても増えない', () async {
+      final FileMemoTemplateRepository repository = createRepository();
+      const List<MemoTemplate> incoming = <MemoTemplate>[
+        MemoTemplate(id: 'zip-1', title: '取り込み', body: '本文'),
+      ];
+
+      expect(await repository.mergeAll(incoming), 1);
+      expect(await repository.mergeAll(incoming), 0);
+      expect(await repository.listAll(), hasLength(1));
+    });
+
+    test('保存後に .tmp が残らない（追記も 1 回の書き込みで行う）', () async {
+      final FileMemoTemplateRepository repository = createRepository();
+      await repository.add(title: '既存', body: '本文');
+
+      await repository.mergeAll(<MemoTemplate>[
+        const MemoTemplate(id: 'zip-1', title: 'A', body: 'a'),
+        const MemoTemplate(id: 'zip-2', title: 'B', body: 'b'),
+      ]);
+
+      final File tmp = File('${templatesFile().path}.tmp');
+
+      expect(await tmp.exists(), isFalse);
+      expect(await repository.listAll(), hasLength(3));
+    });
+
+    test('破損ファイルは退避したうえで追記する', () async {
+      final FileMemoTemplateRepository repository = createRepository();
+      templatesFile()
+        ..createSync(recursive: true)
+        ..writeAsStringSync('{壊れた');
+
+      final int added = await repository.mergeAll(<MemoTemplate>[
+        const MemoTemplate(id: 'zip-1', title: '取り込み', body: '本文'),
+      ]);
+
+      expect(added, 1);
+      expect(await repository.listAll(), hasLength(1));
+    });
+  });
+
   group('アトミック書き込み', () {
     test('保存後に .tmp が残らない', () async {
       final FileMemoTemplateRepository repository = createRepository();

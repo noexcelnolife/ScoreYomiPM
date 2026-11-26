@@ -52,4 +52,18 @@ class FakeMemoTemplateRepository implements MemoTemplateRepository {
   Future<void> delete(String id) async {
     _templates.removeWhere((MemoTemplate item) => item.id == id);
   }
+
+  @override
+  Future<int> mergeAll(List<MemoTemplate> templates) async {
+    final Set<String> existingIds = <String>{
+      for (final MemoTemplate item in _templates) item.id,
+    };
+    int added = 0;
+    for (final MemoTemplate item in templates) {
+      if (!existingIds.add(item.id)) continue;
+      _templates.add(item);
+      added++;
+    }
+    return added;
+  }
 }

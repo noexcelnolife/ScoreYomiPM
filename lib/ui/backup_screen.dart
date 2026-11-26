@@ -406,6 +406,7 @@ class _BackupScreenState extends State<BackupScreen> {
               _InfoLine('スキップ', '${outcome.skipped} 件'),
               _InfoLine('画像復元', '${outcome.imagesRestored} 枚'),
               _InfoLine('画像欠落', '${outcome.missingImages} 件'),
+              _InfoLine('テンプレート追加', '${outcome.templatesImported} 件'),
               if (outcome.imported == 0 && mode == ImportMode.merge)
                 const Padding(
                   padding: EdgeInsets.only(top: 8),
@@ -530,6 +531,7 @@ class _ImportPreviewDialogState extends State<_ImportPreviewDialog> {
       _InfoLine('書き出し日時', _formatDateTime(preview.manifest.exportedAt)),
       _InfoLine('アプリ版', preview.manifest.appVersion),
       _InfoLine('重複（既存と同一）', '${preview.duplicateCount} 件'),
+      _InfoLine('メモのテンプレート', '${preview.templateCount} 件'),
       if (existingCount != null) _InfoLine('既存の記録', '$existingCount 件'),
       if (preview.warnings.isNotEmpty) ...<Widget>[
         _InfoLine('警告', '${preview.warnings.length} 件'),
@@ -593,9 +595,10 @@ class _ImportPreviewDialogState extends State<_ImportPreviewDialog> {
           padding: const EdgeInsets.only(top: 8),
           child: Text(
             widget.existingCount == null
-                ? '既存の記録と画像はすべて削除されます。元に戻せません。'
+                ? '既存の記録と画像はすべて削除されます。'
+                      'メモのテンプレートは削除されません（追加のみ）。元に戻せません。'
                 : '既存の記録 ${widget.existingCount} 件と画像はすべて削除されます。'
-                      '元に戻せません。',
+                      'メモのテンプレートは削除されません（追加のみ）。元に戻せません。',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.error,
             ),
