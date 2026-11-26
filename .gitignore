@@ -1,0 +1,99 @@
+# 環境変数・秘密情報
+.env
+.env.*
+!.env.example
+
+# 依存関係・ビルド成果物
+node_modules/
+dist/
+build/
+.venv/
+__pycache__/
+
+# OS・エディタ設定
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ログ・一時ファイル
+*.log
+
+# 曲DB生成ツールの生HTMLキャッシュ（wiki 全文をコミットしない・メタ情報は tool/songdb_manifest.json）
+tool/data/
+
+# 配信 DB の生成物（BEMANIWiki の表を変換したもの）。
+# WHY: 第三者コンテンツの再配布を避けるため、生成物はリポジトリに含めない。
+# 取得元 URL・取得日時・sha256 は tool/songdb_manifest.json に記録済みで、
+# `dart run tool/generate_songdb.dart` で誰でも再生成できる（APK にも同梱しない）。
+/db/
+
+# 内部の開発記録（設計確認レポート・実測ログ・リリースノート等）。
+# WHY: 公開物として読ませる内容ではなく、商標名（対象ゲーム名・メーカー名）と
+# 社内検討の経緯が大量に含まれる。README が参照する docs/media/ だけを追跡する。
+# 手元のファイルは削除していない（git の管理対象から外れるだけ）。
+/docs/*
+!/docs/media/
+
+# 内部資料（仕様書・計画書・設計メモ・進捗ダッシュボード・実測ログ）。
+# WHY: 公開物ではなく、対象ゲーム名／メーカー名（商標）と社内の検討経緯・
+# 未確定事項が最も濃く含まれる層である。ファイルは手元に残したまま、
+# git の管理対象から外す。README はこれらを参照していない（docs/media/ のみ）。
+/spec.md
+/popn_score_app_plan.md
+/search_design.md
+/tool/dashboard/
+/tool/*.txt
+
+# ダッシュボード生成物（ルート直下 dashboard/ のみ。tool/dashboard/ の状態 JSON・テンプレートは対象外）
+/dashboard/
+
+# --- Flutter / Dart (PoC 追記) ---
+# Flutter/Dart/Pub related
+**/doc/api/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+coverage/
+
+# Android related
+**/android/**/gradle-wrapper.jar
+**/android/.gradle
+**/android/local.properties
+local.properties
+**/android/key.properties
+*.jks
+*.keystore
+# WHY: 秘密鍵・証明書系の拡張子を網羅する。*.jks / *.keystore だけでは
+# PEM や PKCS#12 形式の鍵を取りこぼす。keystore を別形式で書き出す人、
+# あるいは Firebase 等から落とした鍵を置いた場合に履歴へ入るのを防ぐ。
+*.pem
+*.p12
+*.p8
+*.pfx
+
+# 秘密情報と一時作業ファイルの置き場。
+# WHY: 規約（conventions/coding-conventions.md・repo-intake.md）は
+# 「key.properties や .env などの秘密情報は .local/ に置き、コミットしない」
+# と定めているが、このリポジトリでは .local/ 自体が無視されていなかった。
+# `git add -A` を一度叩くだけで keystore やパスワードの控えが履歴に入る状態だった
+# ため、ディレクトリごと無視する（2026-11-25 に発見）。
+# 注意: 他の除外指定（*.jks 等）はここに包含されるが、明示は残す。
+# .local/ を無視する以上、本物の秘密情報を .local/ 以外に置いてはならない。
+/.local/
+
+# IntelliJ / Android Studio project files
+*.iml
+*.ipr
+*.iws
+
+# 開発中の一時ファイル（スクショ・ログ・adb dump・デバッグ用スクリプト）。
+# 先頭 _ は「コミットしない作業ファイル」の目印として使っている。
+/_*
+/tmp_*.txt
+/tool/_*
+
+# エージェントの作業メモ（設計確認・完了報告）。リポジトリには含めない
+/memory/

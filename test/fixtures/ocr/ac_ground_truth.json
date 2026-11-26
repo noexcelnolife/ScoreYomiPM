@@ -1,0 +1,42 @@
+{
+  "description": "実機リザルト写真 30 枚の正解値（Ground Truth）。ac_v1 パイプラインの精度測定とスコア式検証の基準とする。WHY: OCR 出力は誤読を含むため、精度評価には実画像を目視した正解が必須。ユーザーが実機写真を目視して記入した一次データであり、リードは値を改変せず JSON 化のみ行った。",
+  "sourceImages": "testimage/AC-HC-photo/ （実機リザルト写真 30 枚・全員測定コーパス）",
+  "capturedBy": "ユーザー記入（2026-11-23・docs/gt_input_template_ac30_2026-11-23.xlsx の GT入力シート）→ Aion CLI (lead) が同値を JSON 化（2026-11-23）",
+  "designFacts": [
+    "実機リザルト画面の判定欄は COOL/GREAT/GOOD/BAD の 4 行（プレーシェアと同様・MISS 行なし）。",
+    "ユーザー記入時の列定義: スコア/COOL/GREAT/GOOD/BAD/MAX COMBO/レベル/曲名/難易度/クリアメダル（任意）。",
+    "クリアメダル列は全 30 枚で未記入（画面にメダル表示が無い、または任意のため）。medalText は全件 null。"
+  ],
+  "samples": [
+    {"file": "G_j8SovaUAAeeHL.jpg", "score": 69767, "coolCount": 104, "greatCount": 84, "goodCount": 43, "badCount": 32, "maxCombo": 55, "level": 18, "difficulty": "NORMAL", "songTitleRaw": "ビビデバ", "medalText": null, "notes": null},
+    {"file": "HAtmq0LaMAA3fQw.jpg", "score": 71480, "coolCount": 111, "greatCount": 145, "goodCount": 12, "badCount": 38, "maxCombo": 40, "level": 17, "difficulty": "LIGHT", "songTitleRaw": "o†o", "medalText": null, "notes": null},
+    {"file": "HE8eMwTb0AAwJOV.jpg", "score": 98067, "coolCount": 1086, "greatCount": 63, "goodCount": 4, "badCount": 2, "maxCombo": 625, "level": 44, "difficulty": "EX", "songTitleRaw": "Silent Flame, Never Fade", "medalText": null, "notes": null},
+    {"file": "HE9FveQaEAApshk.jpg", "score": 72662, "coolCount": 50, "greatCount": 81, "goodCount": 13, "badCount": 12, "maxCombo": 38, "level": 6, "difficulty": "LIGHT", "songTitleRaw": "Silent Flame, Never Fade", "medalText": null, "notes": null},
+    {"file": "HFCNzIBa4AAJQac.jpg", "score": 67766, "coolCount": 101, "greatCount": 109, "goodCount": 65, "badCount": 27, "maxCombo": 93, "level": 19, "difficulty": "NORMAL", "songTitleRaw": "Silent Flame, Never Fade", "medalText": null, "notes": null},
+    {"file": "HFJY5E-bIAAqzBA.jpg", "score": 74870, "coolCount": 31, "greatCount": 117, "goodCount": 6, "badCount": 0, "maxCombo": 154, "level": 6, "difficulty": "LIGHT", "songTitleRaw": "Silent Flame, Never Fade", "medalText": null, "notes": null},
+    {"file": "HFNsUYSbIAA9gmx.jpg", "score": 89573, "coolCount": 796, "greatCount": 185, "goodCount": 51, "badCount": 41, "maxCombo": 179, "level": 45, "difficulty": "EX", "songTitleRaw": "朧", "medalText": null, "notes": null},
+    {"file": "HGRWuJeakAAwRV4.jpg", "score": 75400, "coolCount": 162, "greatCount": 78, "goodCount": 24, "badCount": 37, "maxCombo": 55, "level": 19, "difficulty": "NORMAL", "songTitleRaw": "Silent Flame, Never Fade", "medalText": null, "notes": null},
+    {"file": "HGbGrbia8AAdP8d.jpg", "score": 82100, "coolCount": 190, "greatCount": 69, "goodCount": 20, "badCount": 26, "maxCombo": 79, "level": 19, "difficulty": "NORMAL", "songTitleRaw": "Silent Flame, Never Fade", "medalText": null, "notes": null},
+    {"file": "HHxpJnDboAAMHWJ.jpg", "score": 83860, "coolCount": 526, "greatCount": 270, "goodCount": 70, "badCount": 36, "maxCombo": 142, "level": 39, "difficulty": "HYPER", "songTitleRaw": "防人恋歌", "medalText": null, "notes": null},
+    {"file": "HJS4fvoa4AAGDEF.jpg", "score": 68720, "coolCount": 109, "greatCount": 77, "goodCount": 36, "badCount": 29, "maxCombo": 101, "level": 16, "difficulty": "NORMAL", "songTitleRaw": "ビビデバ", "medalText": null, "notes": null},
+    {"file": "HOjcQkDbIAARv7s.jpg", "score": 99553, "coolCount": 1724, "greatCount": 22, "goodCount": 2, "badCount": 6, "maxCombo": 588, "level": 50, "difficulty": "EX", "songTitleRaw": "シュレーディンガーの猫", "medalText": null, "notes": null},
+    {"file": "HSi7ZNDbcAAzaF7.jpg", "score": 85250, "coolCount": 453, "greatCount": 201, "goodCount": 46, "badCount": 45, "maxCombo": 141, "level": 35, "difficulty": "HYPER", "songTitleRaw": "Silent Flame, Never Fade", "medalText": null, "notes": null},
+    {"file": "HV8q_4WaEAEbLHQ.jpg", "score": 100000, "coolCount": 1306, "greatCount": 0, "goodCount": 0, "badCount": 0, "maxCombo": 1306, "level": 47, "difficulty": "EX", "songTitleRaw": "Electronic or Treat!", "medalText": null, "notes": null},
+    {"file": "HW7cJQabkAETBKb.jpg", "score": 99172, "coolCount": 1651, "greatCount": 17, "goodCount": 8, "badCount": 10, "maxCombo": 390, "level": 50, "difficulty": "EX", "songTitleRaw": "Blue River", "medalText": null, "notes": null},
+    {"file": "HWNFzW0awAAChzB.jpg", "score": 99707, "coolCount": 812, "greatCount": 8, "goodCount": 0, "badCount": 0, "maxCombo": 820, "level": 49, "difficulty": "EX", "songTitleRaw": "悲しいね", "medalText": null, "notes": null},
+    {"file": "HWSQHQCbAAAa4xE.jpg", "score": 100000, "coolCount": 1285, "greatCount": 0, "goodCount": 0, "badCount": 0, "maxCombo": 1285, "level": 47, "difficulty": "EX", "songTitleRaw": "YAOYOROZ 8000000", "medalText": null, "notes": null},
+    {"file": "HWhP_5lbsAAjrj1.jpg", "score": 99943, "coolCount": 1596, "greatCount": 3, "goodCount": 0, "badCount": 0, "maxCombo": 1599, "level": 49, "difficulty": "EX", "songTitleRaw": "Red Mountain", "medalText": null, "notes": null},
+    {"file": "HWr-kM7aYAAJApR.jpg", "score": 99679, "coolCount": 1204, "greatCount": 13, "goodCount": 0, "badCount": 0, "maxCombo": 1217, "level": 48, "difficulty": "EX", "songTitleRaw": "ULTRA BUTTERFLY(坤剛力)", "medalText": null, "notes": null},
+    {"file": "HWxJNvybwAEQz48.jpg", "score": 99593, "coolCount": 1091, "greatCount": 15, "goodCount": 0, "badCount": 0, "maxCombo": 1106, "level": 48, "difficulty": "EX", "songTitleRaw": "Vairocana", "medalText": null, "notes": null},
+    {"file": "HXAfzXHbMAEdBHI.jpg", "score": 99953, "coolCount": 1278, "greatCount": 2, "goodCount": 0, "badCount": 5, "maxCombo": 401, "level": 49, "difficulty": "EX", "songTitleRaw": "Übertreffen", "medalText": null, "notes": null},
+    {"file": "HXQFG2CaUAAR4sc.jpg", "score": 99802, "coolCount": 1209, "greatCount": 8, "goodCount": 0, "badCount": 1, "maxCombo": 809, "level": 48, "difficulty": "EX", "songTitleRaw": "ULTRA BUTTERFLY(坤剛力)", "medalText": null, "notes": null},
+    {"file": "HXexEwtaIAA-sF2.jpg", "score": 77117, "coolCount": 221, "greatCount": 154, "goodCount": 61, "badCount": 24, "maxCombo": 78, "level": 26, "difficulty": "NORMAL", "songTitleRaw": "祭囃子", "medalText": null, "notes": null},
+    {"file": "HXfcDNma4AAplrZ.jpg", "score": 99943, "coolCount": 1592, "greatCount": 3, "goodCount": 0, "badCount": 0, "maxCombo": 1595, "level": 49, "difficulty": "EX", "songTitleRaw": "儚キ戀ノ幻想譚", "medalText": null, "notes": null},
+    {"file": "HXoFHBhbYAAKdr-.jpg", "score": 99250, "coolCount": 1209, "greatCount": 31, "goodCount": 0, "badCount": 0, "maxCombo": 1240, "level": 46, "difficulty": "EX", "songTitleRaw": "祭囃子", "medalText": null, "notes": null},
+    {"file": "HXpqyrfakAAbo3G.jpg", "score": 81610, "coolCount": 791, "greatCount": 525, "goodCount": 156, "badCount": 49, "maxCombo": 202, "level": 48, "difficulty": "EX", "songTitleRaw": "POLꞰAMAИIA", "medalText": null, "notes": null},
+    {"file": "HXt-zFta4AAbrtN.jpg", "score": 89116, "coolCount": 881, "greatCount": 313, "goodCount": 48, "badCount": 26, "maxCombo": 325, "level": 48, "difficulty": "EX", "songTitleRaw": "カーニバルの主題による人形のためのいびつな狂想曲", "medalText": null, "notes": null},
+    {"file": "HXtt8jgaMAEF8Tp.jpg", "score": 94111, "coolCount": 391, "greatCount": 91, "goodCount": 2, "badCount": 0, "maxCombo": 484, "level": 30, "difficulty": "HYPER", "songTitleRaw": "ドーナツホール", "medalText": null, "notes": null},
+    {"file": "HXuql59aUAE_WYF.jpg", "score": 91177, "coolCount": 917, "greatCount": 288, "goodCount": 30, "badCount": 7, "maxCombo": 620, "level": 46, "difficulty": "EX", "songTitleRaw": "祭囃子", "medalText": null, "notes": null},
+    {"file": "HXurIALa0AAkc0R.jpg", "score": 82876, "coolCount": 649, "greatCount": 396, "goodCount": 119, "badCount": 30, "maxCombo": 333, "level": 48, "difficulty": "EX", "songTitleRaw": "Red Roses", "medalText": null, "notes": null}
+  ]
+}

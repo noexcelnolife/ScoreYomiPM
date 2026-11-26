@@ -1,0 +1,154 @@
+{
+  "version": "ac_v1",
+  "generatedAt": "2026-11-23",
+  "generator": "tool/generate_ac_anchor_templates.dart (実測校正・01a2060d Phase 7)",
+  "sourceFixture": "test/fixtures/ocr/ac_hc_batch_results.json",
+  "sourceImages": 30,
+  "imageCount": 30,
+  "baseImage": "2048x1536 (主群モーダル解像度)",
+  "bucketDefinition": "主群 4:3横: landscape (w>h) かつ aspect in [1.25, 1.45] → 23/30 枚",
+  "thresholdNote": "NCC 閾値 0.55・columnEdge 強度 25（0-255 スケール）はlib/ocr/ui_anchor.dart の named 定数群のミラー（asset 契約テストで固定）。",
+  "limitationNote": "NCC テンプレートは単一スケール（2048x1536 切り出し）かつ固定 canonical。ラベル位置は写真構図で cy が大きく動く（例: 最上行 SCORE cy 0.371-0.654）。よって構図・解像度が離れた写真では NCC は欠落し得る。欠落時は ML Kit テキストアンカー主経路（FieldExtractor LayoutKind.acV1）が抽出を継続するため実機能への影響はない。マルチスケール対応は未決課題（裁定 Q3: フォールバック必要）。",
+  "designPolicy": "実運用条件の多様性を前提とした設計（ユーザー裁定 2026-11-23）。AC-HC-photo 30 枚は協力者から得られた実運用写真であり、反射・照度・カメラ角度・解像度差・縦構図といった幾何ばらつきは除外対象ではなく ac_v1 が耐えるべき実運用条件そのもの。30 枚全員を測定コーパスとし、対象外群は設置しない。",
+  "matchers": [
+    {
+      "id": "labelScore",
+      "kind": "ncc",
+      "text": "SCORE",
+      "selection": "最上行（1 写真に 2 要素存在・最小 cy を採用）"
+    },
+    {
+      "id": "labelBest",
+      "kind": "ncc",
+      "text": "BEST"
+    },
+    {
+      "id": "labelCool",
+      "kind": "ncc",
+      "text": "COOL"
+    },
+    {
+      "id": "labelGreat",
+      "kind": "ncc",
+      "text": "GREAT"
+    },
+    {
+      "id": "labelGood",
+      "kind": "ncc",
+      "text": "GOOD"
+    },
+    {
+      "id": "labelBad",
+      "kind": "ncc",
+      "text": "BAD"
+    },
+    {
+      "id": "labelCombo",
+      "kind": "ncc",
+      "text": "COMBO"
+    },
+    {
+      "id": "frameRight",
+      "kind": "columnEdge",
+      "description": "結果画面右端の縦線（カラムエッジ）。NCC テンプレート未使用。"
+    }
+  ],
+  "anchors": [
+    {
+      "id": "frameRight",
+      "template": null,
+      "referenceImage": null,
+      "cropMarginPx": 0,
+      "canonical": {
+        "x": 0.86328125,
+        "y": 0.5
+      },
+      "matchedImages": 23,
+      "note": "主群バケット画素実測（列強度ピーク中央値・帯 [0.80, 0.94]）。"
+    },
+    {
+      "id": "labelScore",
+      "template": "label_score.png",
+      "referenceImage": "HGRWuJeakAAwRV4.jpg",
+      "cropMarginPx": 10,
+      "canonical": {
+        "x": 0.40283203125,
+        "y": 0.5364583333333334
+      },
+      "matchedImages": 23,
+      "note": "主群バケット中央値 canonical（候補 23 枚）。テンプレはモーダル解像度 2048x1536 写真から切り出し。"
+    },
+    {
+      "id": "labelBest",
+      "template": "label_best.png",
+      "referenceImage": "HJS4fvoa4AAGDEF.jpg",
+      "cropMarginPx": 10,
+      "canonical": {
+        "x": 0.39404296875,
+        "y": 0.6110026041666666
+      },
+      "matchedImages": 23,
+      "note": "主群バケット中央値 canonical（候補 23 枚）。テンプレはモーダル解像度 2048x1536 写真から切り出し。"
+    },
+    {
+      "id": "labelCool",
+      "template": "label_cool.png",
+      "referenceImage": "HJS4fvoa4AAGDEF.jpg",
+      "cropMarginPx": 10,
+      "canonical": {
+        "x": 0.41796875,
+        "y": 0.6673177083333334
+      },
+      "matchedImages": 23,
+      "note": "主群バケット中央値 canonical（候補 23 枚）。テンプレはモーダル解像度 2048x1536 写真から切り出し。"
+    },
+    {
+      "id": "labelGreat",
+      "template": "label_great.png",
+      "referenceImage": "HJS4fvoa4AAGDEF.jpg",
+      "cropMarginPx": 10,
+      "canonical": {
+        "x": 0.425048828125,
+        "y": 0.7122395833333334
+      },
+      "matchedImages": 23,
+      "note": "主群バケット中央値 canonical（候補 23 枚）。テンプレはモーダル解像度 2048x1536 写真から切り出し。"
+    },
+    {
+      "id": "labelGood",
+      "template": "label_good.png",
+      "referenceImage": "HJS4fvoa4AAGDEF.jpg",
+      "cropMarginPx": 10,
+      "canonical": {
+        "x": 0.41845703125,
+        "y": 0.7552910052910053
+      },
+      "matchedImages": 23,
+      "note": "主群バケット中央値 canonical（候補 23 枚）。テンプレはモーダル解像度 2048x1536 写真から切り出し。"
+    },
+    {
+      "id": "labelBad",
+      "template": "label_bad.png",
+      "referenceImage": "HJS4fvoa4AAGDEF.jpg",
+      "cropMarginPx": 10,
+      "canonical": {
+        "x": 0.4102783203125,
+        "y": 0.7974950396825398
+      },
+      "matchedImages": 22,
+      "note": "主群バケット中央値 canonical（候補 22 枚）。テンプレはモーダル解像度 2048x1536 写真から切り出し。"
+    },
+    {
+      "id": "labelCombo",
+      "template": "label_combo.png",
+      "referenceImage": "HJS4fvoa4AAGDEF.jpg",
+      "cropMarginPx": 10,
+      "canonical": {
+        "x": 0.424560546875,
+        "y": 0.8411044973544973
+      },
+      "matchedImages": 23,
+      "note": "主群バケット中央値 canonical（候補 23 枚）。テンプレはモーダル解像度 2048x1536 写真から切り出し。"
+    }
+  ]
+}

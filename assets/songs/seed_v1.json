@@ -1,0 +1,338 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-11-22T00:00:00Z",
+  "sourceType": "bundledSeed",
+  "songCount": 33,
+  "songs": [
+    {
+      "id": "popn_hc_001",
+      "title": "Harmonia",
+      "normalizedKey": "harmonia",
+      "genre": "NUPRELUDE",
+      "artist": null,
+      "levels": {"LIGHT": 7, "NORMAL": null, "HYPER": null, "EX": 44},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_002",
+      "title": "お米の美味しい炊き方、そしてお米を食べることによるその効果。",
+      "normalizedKey": "お米の美味しい炊き方そしてお米を食べることによるその効果",
+      "genre": "RICEMETAL",
+      "artist": null,
+      "levels": {"EX": 47},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_003",
+      "title": "Homesick Pt.2&3",
+      "normalizedKey": "homesickpt.2&3",
+      "genre": "SOFTROCK LONG",
+      "artist": null,
+      "levels": {"EX": 44},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_004",
+      "title": "朧",
+      "normalizedKey": "朧",
+      "genre": "FASCINATION",
+      "artist": null,
+      "levels": {"EX": 45},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_005",
+      "title": "Second Heaven",
+      "normalizedKey": "secondheaven",
+      "genre": "HANDZ UP",
+      "artist": null,
+      "levels": {"EX": 45},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_006",
+      "title": "o†o",
+      "normalizedKey": "o†o",
+      "genre": null,
+      "artist": null,
+      "levels": {"EX": 50},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_007",
+      "title": "HAPPY MUSIC",
+      "normalizedKey": "happymusic",
+      "genre": "SUNNY",
+      "artist": null,
+      "levels": {"NORMAL": 18},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_008",
+      "title": "アイスクリームマジック",
+      "normalizedKey": "アイスクリームマジック",
+      "genre": null,
+      "artist": null,
+      "levels": {"NORMAL": 22},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_009",
+      "title": "Mecha Kawa Breaker!!",
+      "normalizedKey": "mechakawabreaker",
+      "genre": null,
+      "artist": null,
+      "levels": {"EX": 50},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_010",
+      "title": "Popperz Chronicle",
+      "normalizedKey": "popperzchronicle",
+      "genre": null,
+      "artist": null,
+      "levels": {"EX": 50},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_011",
+      "title": "生命の焔纏いて",
+      "normalizedKey": "生命の焔纏いて",
+      "genre": "IMBOLC",
+      "artist": null,
+      "levels": {"EX": 50},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_012",
+      "title": "ΔΟΓΜΑ",
+      "normalizedKey": "δογμα",
+      "genre": null,
+      "artist": null,
+      "levels": {"EX": 50},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_013",
+      "title": "ラピストリアの約束",
+      "normalizedKey": "ラピストリアの約束",
+      "genre": "DRUM'N COREDUST2",
+      "artist": null,
+      "levels": {"EX": 48},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_014",
+      "title": "Monkey Business",
+      "normalizedKey": "monkeybusiness",
+      "genre": "HARD DANCE",
+      "artist": null,
+      "levels": {"EX": 47},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_015",
+      "title": "Fragarach",
+      "normalizedKey": "fragarach",
+      "genre": "ANSWERER",
+      "artist": null,
+      "levels": {"EX": 48},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_016",
+      "title": "Oort",
+      "normalizedKey": "oort",
+      "genre": "CELESTIAL",
+      "artist": null,
+      "levels": {"EX": 49},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_017",
+      "title": "Strayed Catz",
+      "normalizedKey": "strayedcatz",
+      "genre": "FANTASY",
+      "artist": null,
+      "levels": {"EX": 49},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_018",
+      "title": "ZETA～素数の世界と超越者～",
+      "normalizedKey": "zeta～素数の世界と超越者～",
+      "genre": "IDM",
+      "artist": null,
+      "levels": {"EX": 49},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_019",
+      "title": "encounter",
+      "normalizedKey": "encounter",
+      "genre": null,
+      "artist": null,
+      "levels": {"EX": 48},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_020",
+      "title": "ピアノ独奏無言歌 \"灰燼\"",
+      "normalizedKey": "ピアノ独奏無言歌\"灰燼\"",
+      "genre": null,
+      "artist": null,
+      "levels": {"EX": 49},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_021",
+      "title": "Hatcha Metcha Party",
+      "normalizedKey": "hatchametchaparty",
+      "genre": "PANIC CORE",
+      "artist": null,
+      "levels": {"EX": 47},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_022",
+      "title": "文明開化",
+      "normalizedKey": "文明開化",
+      "genre": "CHIN-DON-JAZZ",
+      "artist": null,
+      "levels": {"EX": 47},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_023",
+      "title": "ませまてぃっく♥ま＋ま＝まじっく！",
+      "normalizedKey": "ませまてぃっくま＋ま＝まじっく",
+      "genre": null,
+      "artist": null,
+      "levels": {"EX": 47},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "popn_hc_024",
+      "title": "Visterhv",
+      "normalizedKey": "visterhv",
+      "genre": "REBIRTH OUT",
+      "artist": null,
+      "levels": {"EX": 47},
+      "totalNotes": null,
+      "version": "HC"
+    },
+    {
+      "id": "scr_001",
+      "title": "黒髪乱れし修羅となりて",
+      "normalizedKey": "黒髪乱れし修羅となりて",
+      "genre": "撫子メタル",
+      "artist": null,
+      "levels": {"NORMAL": 28},
+      "totalNotes": null,
+      "version": null
+    },
+    {
+      "id": "scr_002",
+      "title": "金縛りの逢を",
+      "normalizedKey": "金縛りの逢を",
+      "genre": null,
+      "artist": null,
+      "levels": {"NORMAL": 28},
+      "totalNotes": null,
+      "version": null
+    },
+    {
+      "id": "scr_003",
+      "title": "イノセントバイブル",
+      "normalizedKey": "イノセントバイブル",
+      "genre": "HOLY SALVATION",
+      "artist": null,
+      "levels": {"NORMAL": 28},
+      "totalNotes": null,
+      "version": null
+    },
+    {
+      "id": "scr_004",
+      "title": "星屑の夜果て",
+      "normalizedKey": "星屑の夜果て",
+      "genre": "STARDUST BEAT",
+      "artist": null,
+      "levels": {"NORMAL": 28},
+      "totalNotes": null,
+      "version": null
+    },
+    {
+      "id": "scr_005",
+      "title": "待チ人ハ来ズ。",
+      "normalizedKey": "待チ人ハ来ズ",
+      "genre": null,
+      "artist": null,
+      "levels": {"NORMAL": 28},
+      "totalNotes": null,
+      "version": null
+    },
+    {
+      "id": "scr_006",
+      "title": "水晶塔のオルカ",
+      "normalizedKey": "水晶塔のオルカ",
+      "genre": "CRYSTARIUM",
+      "artist": null,
+      "levels": {"NORMAL": 29},
+      "totalNotes": null,
+      "version": null
+    },
+    {
+      "id": "scr_007",
+      "title": "月雪に舞う花のように",
+      "normalizedKey": "月雪に舞う花のように",
+      "genre": "フォレストスノウ",
+      "artist": null,
+      "levels": {"NORMAL": 28},
+      "totalNotes": null,
+      "version": null
+    },
+    {
+      "id": "scr_008",
+      "title": "Majestaria",
+      "normalizedKey": "majestaria",
+      "genre": "DOMINANT FULL-ON",
+      "artist": null,
+      "levels": {"NORMAL": 28},
+      "totalNotes": null,
+      "version": null
+    },
+    {
+      "id": "scr_009",
+      "title": "Sorrows",
+      "normalizedKey": "sorrows",
+      "genre": "EMO",
+      "artist": null,
+      "levels": {"NORMAL": 29},
+      "totalNotes": null,
+      "version": null
+    }
+  ]
+}

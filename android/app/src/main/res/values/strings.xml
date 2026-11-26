@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WHY: ここは「日本語以外のロケール」の既定値になる（values-ja が無いロケールは
+     この値にフォールバックする）。端末の言語が日本語のときだけ values-ja が使われる。
+     2026-11-25 のユーザー決定により、非日本語圏のランチャー表示名は英字表記にする。 -->
+<resources>
+    <string name="app_name">ScoreYomiPM</string>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WHY: 端末の言語が日本語のときだけこのファイルが選ばれ、ランチャーの表示名が
+     日本語表記になる。日本語以外は values/strings.xml の ScoreYomiPM。 -->
+<resources>
+    <string name="app_name">スコアヨミPM</string>
+</resources>

@@ -1,0 +1,107 @@
+{
+  "version": "ac_v1",
+  "generatedAt": "2026-11-23T04:08:48.109400Z",
+  "generator": "tool/generate_ac_anchor_templates.dart (実測校正 2026-11-23)",
+  "sourceFixture": "test/fixtures/ocr/ac_hc_batch_results.json",
+  "sourceImages": 30,
+  "baseImage": "2048x1536 (主群モーダル解像度・テンプレ切り出し基準)",
+  "note": "ac_v1 実測校正版。canonical は主群 4:3横バケット（aspect [1.25,1.45]）の ML Kit 実測中央値。NCC テンプレートは単一スケール・固定 canonical のため構図・解像度が離れると欠落し得る（解像度別ヒット率は生成ツールの検証出力と manifest を参照）。欠落時は ML Kit テキストアンカー主経路が抽出を継続するため機能への影響はない。実行時ゲート定数は ui_anchor.dart の named 定数群をミラー（契約テストで一致を固定）。",
+  "definitions": [
+    {
+      "id": "frameRight",
+      "kind": "columnEdge",
+      "canonical": {
+        "x": 0.86328125,
+        "y": 0.5
+      },
+      "threshold": 0.09803921568627451,
+      "template": null,
+      "matchedImages": 23,
+      "note": "主群バケット画素実測（列強度ピーク中央値）。実行時ゲートは ui_anchor.dart _columnEdgeMinStrength。"
+    },
+    {
+      "id": "labelScore",
+      "kind": "ncc",
+      "canonical": {
+        "x": 0.40283203125,
+        "y": 0.5364583333333334
+      },
+      "threshold": 0.55,
+      "template": "label_score.png",
+      "matchedImages": 23,
+      "note": "主群バケット中央値 canonical・モーダル解像度テンプレート。"
+    },
+    {
+      "id": "labelBest",
+      "kind": "ncc",
+      "canonical": {
+        "x": 0.39404296875,
+        "y": 0.6110026041666666
+      },
+      "threshold": 0.55,
+      "template": "label_best.png",
+      "matchedImages": 23,
+      "note": "主群バケット中央値 canonical・モーダル解像度テンプレート。"
+    },
+    {
+      "id": "labelCool",
+      "kind": "ncc",
+      "canonical": {
+        "x": 0.41796875,
+        "y": 0.6673177083333334
+      },
+      "threshold": 0.55,
+      "template": "label_cool.png",
+      "matchedImages": 23,
+      "note": "主群バケット中央値 canonical・モーダル解像度テンプレート。"
+    },
+    {
+      "id": "labelGreat",
+      "kind": "ncc",
+      "canonical": {
+        "x": 0.425048828125,
+        "y": 0.7122395833333334
+      },
+      "threshold": 0.55,
+      "template": "label_great.png",
+      "matchedImages": 23,
+      "note": "主群バケット中央値 canonical・モーダル解像度テンプレート。"
+    },
+    {
+      "id": "labelGood",
+      "kind": "ncc",
+      "canonical": {
+        "x": 0.41845703125,
+        "y": 0.7552910052910053
+      },
+      "threshold": 0.55,
+      "template": "label_good.png",
+      "matchedImages": 23,
+      "note": "主群バケット中央値 canonical・モーダル解像度テンプレート。"
+    },
+    {
+      "id": "labelBad",
+      "kind": "ncc",
+      "canonical": {
+        "x": 0.4102783203125,
+        "y": 0.7974950396825398
+      },
+      "threshold": 0.55,
+      "template": "label_bad.png",
+      "matchedImages": 22,
+      "note": "主群バケット中央値 canonical・モーダル解像度テンプレート。"
+    },
+    {
+      "id": "labelCombo",
+      "kind": "ncc",
+      "canonical": {
+        "x": 0.424560546875,
+        "y": 0.8411044973544973
+      },
+      "threshold": 0.55,
+      "template": "label_combo.png",
+      "matchedImages": 23,
+      "note": "主群バケット中央値 canonical・モーダル解像度テンプレート。"
+    }
+  ]
+}

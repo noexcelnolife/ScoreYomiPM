@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ランチャーアイコンの背景色。アイコンは自前描画（アーケード版の 9 ボタン配置
+     ではなく単体の半球押しボタン）で、公式のロゴ・書体・キャラクター・配色は使用していない。 -->
+<resources>
+    <color name="ic_launcher_background">#FFFFFF</color>
+</resources>

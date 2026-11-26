@@ -1,0 +1,17 @@
+# Gitleaks 設定（`gitleaks dir .` / `gitleaks git` が自動で読み込む）
+#
+# WHY allowlist を書いているか:
+#   db/popn_hc_main_v1.json は曲の識別用 `normalizedKey` を
+#   大量に持つ生成物で、generic-api-key ルールの「キー名 + 高エントロピー文字列」に
+#   誤検知する。2026-11-25 の実行では 3 件すべてがこのパターンだった（実値は下記）。
+#   このファイル自体は .gitignore の /db/ でリポジトリには入らないが、
+#   DoD の M-5 は作業ツリーを対象に走らせるため、ローカル実行でも誤検知を消す必要がある。
+#
+#   注意: allowlist はパス単位で丸ごと除外する。db/ に本物の秘密情報を置かないこと。
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "曲DB生成物の normalizedKey は秘密情報ではない"
+paths = ['''db/popn_hc_main_v1\.json$''']

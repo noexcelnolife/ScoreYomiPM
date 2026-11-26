@@ -1,0 +1,24 @@
+{
+  "output": {
+    "path": "db/popn_hc_main_v1.json",
+    "byteCount": 1026826,
+    "sha256": "d5e7519f2bced58ce03938279f268c793a9d780a88ea2d04ff1f8705103a8a7d"
+  },
+  "sources": [
+    {
+      "key": "oldList",
+      "url": "https://bemaniwiki.com/index.php?pop%27n+music+High%E2%98%86Cheers%21%21/%E6%97%A7%E6%9B%B2%E3%83%AA%E3%82%B9%E3%83%88",
+      "fetchedAt": "2026-11-22T07:52:36.844996Z",
+      "byteCount": 1578332,
+      "sha256": "437cebfbdc802b3e614821a644491800718432fe9e3554f22c6679fd145a18e0"
+    },
+    {
+      "key": "newList",
+      "url": "https://bemaniwiki.com/index.php?pop%27n+music+High%E2%98%86Cheers%21%21/%E6%96%B0%E6%9B%B2%E3%83%AA%E3%82%B9%E3%83%88",
+      "fetchedAt": "2026-11-22T07:52:36.886964Z",
+      "byteCount": 266713,
+      "sha256": "b53a7b0da42fb3c6534e20463ce569e92fcae13ffcc57771f52aefbc480e41bf"
+    }
+  ],
+  "generator": "tool/generate_songdb.dart"
+}

@@ -1,0 +1,73 @@
+{
+  "version": "hc_v1",
+  "generatedAt": "2026-11-22T08:02:05.052760Z",
+  "generator": "tool/generate_anchor_templates.dart",
+  "sourceFixture": "test/fixtures/ocr/playshare_batch_results.json",
+  "sourceImages": "testimage/playshare/",
+  "imageCount": 30,
+  "thresholdNote": "definition.threshold mirrors lib/ocr/ui_anchor.dart named constants (_nccScoreThreshold=0.55, _columnEdgeMinStrength=25/255); runtime gates are the code constants and the asset contract test pins the equality",
+  "matchers": {
+    "gaugeHeader": "text contains 'GAU' or 'GROU', cy in [0.30, 0.40]",
+    "settingsNormal": "text contains 'MAL', cy >= 0.60, cx >= 0.65",
+    "difficultyEx": "text == 'EX', cy <= 0.20"
+  },
+  "anchors": {
+    "gaugeHeader": {
+      "template": "gauge_header.png",
+      "referenceImage": "p2042268136691630118_media_1795266573291_nhgclt.jpg",
+      "bbox": {
+        "l": 653.0,
+        "t": 274.0,
+        "r": 738.0,
+        "b": 297.0
+      },
+      "cropMarginPx": 6,
+      "canonical": {
+        "x": 0.5796,
+        "y": 0.3525
+      },
+      "matchedImages": 29
+    },
+    "settingsNormal": {
+      "template": "settings_normal.png",
+      "referenceImage": "p2103879447929913366_media_1795266602992_12h1bb.jpg",
+      "bbox": {
+        "l": 821.0,
+        "t": 647.0,
+        "r": 880.0,
+        "b": 659.0
+      },
+      "cropMarginPx": 6,
+      "canonical": {
+        "x": 0.7087,
+        "y": 0.8163
+      },
+      "matchedImages": 29
+    },
+    "difficultyEx": {
+      "template": "difficulty_ex.png",
+      "referenceImage": "p2042268146539889135_media_1795266573331_3490q2.jpg",
+      "bbox": {
+        "l": 545.0,
+        "t": 110.0,
+        "r": 592.0,
+        "b": 136.0
+      },
+      "cropMarginPx": 6,
+      "canonical": {
+        "x": 0.4738,
+        "y": 0.1536
+      },
+      "matchedImages": 24
+    },
+    "frameRight": {
+      "template": null,
+      "canonical": {
+        "x": 0.4467,
+        "y": 0.5
+      },
+      "basis": "design §1.1 measured edge x≈536px/1200 (30/30)",
+      "matchedImages": 30
+    }
+  }
+}
