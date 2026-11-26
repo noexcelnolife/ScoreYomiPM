@@ -169,10 +169,6 @@ flutter build apk --release
 
 出力は `build/app/outputs/flutter-apk/app-release.apk`。AAB が必要な場合は `flutter build appbundle`（出力は `build/app/outputs/bundle/release/app-release.aab`）。バージョンは `pubspec.yaml` の `version`（現在 `1.0.1+2`）がそのまま `versionName` / `versionCode` になる。
 
-### 動作環境
-
-Android 7.0（API 24）以上。日本語の OCR モデルはアプリに同梱している（`android/app/build.gradle.kts` で `com.google.mlkit:text-recognition-japanese` を明示的に依存へ追加している）ため、モデルの追加ダウンロードは不要である。
-
 ### リリースビルドに関する注意
 
 - 署名は**自前の keystore が必須**である。`android/key.properties` が無いと `flutter build apk --release` は意図的に失敗する。手順は [`RELEASING.md`](RELEASING.md) を参照。Flutter テンプレート既定の「debug 鍵にフォールバックする」設定は、誰でも同じ鍵で APK を作れてしまう（＝なりすましが可能）ため削除している。
@@ -200,17 +196,11 @@ flutter test --dart-define=RUN_SLOW_TESTS=true test/roll_corrector_test.dart
 
 ## 要求する権限
 
-release APK を `aapt dump permissions` で実測した結果は次のとおり。
-
 | 権限 | 用途 | 許可しない場合 |
 |---|---|---|
 | `CAMERA`（任意） | アプリ内の撮影画面でスコアを撮るとき | ギャラリーやファイルからの取り込みは使える |
 | `INTERNET` | 収録曲辞書を配信 URL から更新するときのみ | 同梱の辞書で動作する（更新だけができない） |
 | `ACCESS_NETWORK_STATE` | 上記の更新時に通信可能な状態かを確認する | 影響なし（実行時に許可を求める種類の権限ではない） |
-
-- 記録の保存・読み込み・バックアップは端末内で完結し、**記録を外部へ送信することはない**。
-- **`RECORD_AUDIO`（マイク）は要求しない。** `camera` プラグインが動画撮影用に無条件で宣言するが、本アプリは静止画しか撮らないため `tools:node="remove"` で落としている。
-- **`READ_EXTERNAL_STORAGE` / `WRITE_EXTERNAL_STORAGE` も要求しない。** 画像の取り込みは OS のファイル選択（Photo Picker / `ACTION_GET_CONTENT`）経由で、返却された URI に一時的な読み取り権限が付くため不要である。
 
 ## 同梱フォントとライセンス
 
