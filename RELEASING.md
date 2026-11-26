@@ -123,7 +123,7 @@ uses-permission: name='com.scoreyomipm.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISS
 
 ### タグ名の規約
 
-`v<バージョン>` の形式とする。例：`v1.0.0`。
+`v<バージョン>` の形式とする。例：`v1.0.1`。
 
 ### APK のファイル名
 
@@ -145,10 +145,10 @@ GitHub Releases でリリースを公開し、タグを付与する。
 
 ## 6. versionCode の更新ルール
 
-`pubspec.yaml` の `version: 1.0.0+1` の `+1` 部分（versionCode）を、リリースごとに必ず1以上上げる。
+`pubspec.yaml` の `version: 1.0.1+2` の `+2` 部分（versionCode）を、リリースごとに必ず1以上上げる。
 
 - 理由：Android OS は versionCode でアプリの新旧を判断する。versionCode が同じまたは古い APK を配布すると、ユーザー側で「アップデートがない」と判断され、新しい APK がインストールされない。
-- `versionName`（`1.0.0`）はユーザー向け表示バージョンで、必ずしも上げる必要はないが、リリースごとに versionCode は必ずインクリメントすること。
+- `versionName`（`1.0.1`）はユーザー向け表示バージョンで、必ずしも上げる必要はないが、リリースごとに versionCode は必ずインクリメントすること。
 
 ---
 
@@ -189,12 +189,12 @@ git gc --prune=now
 以下は**ユーザー自身が実行する**（チームに push 権限は無い）。
 
 ```powershell
-git tag -a v1.0.0 -m "ScoreYomiPM v1.0.0"
+git tag -a v1.0.1 -m "ScoreYomiPM v1.0.1"
 git push origin main
-git push origin v1.0.0
+git push origin v1.0.1
 ```
 
-GitHub の画面で Releases → Draft a new release → タグ `v1.0.0` を選択 → APK を添付 → 本文を記入して公開する。`gh` CLI を使う場合は `gh release create v1.0.0 <APKのパス> --title "v1.0.0" --notes-file <メモのパス>`。
+GitHub の画面で Releases → Draft a new release → タグ `v1.0.1` を選択 → APK を添付 → 本文を記入して公開する。`gh` CLI を使う場合は `gh release create v1.0.1 <APKのパス> --title "v1.0.1" --notes-file <メモのパス>`。
 
 ## 9. （参考）key.properties 無しでのビルド失敗例
 

@@ -10,4 +10,4 @@
 //
 // WHY(kAppVersion): リードの呼称が kAppVersion だったため、この名前で公開する
 // （バックアップ manifest の appVersion フィールドとは別物）。
-const String kAppVersion = '1.0.0+1';
+const String kAppVersion = '1.0.1+2';

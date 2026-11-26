@@ -167,7 +167,7 @@ flutter run
 flutter build apk --release
 ```
 
-出力は `build/app/outputs/flutter-apk/app-release.apk`。AAB が必要な場合は `flutter build appbundle`（出力は `build/app/outputs/bundle/release/app-release.aab`）。バージョンは `pubspec.yaml` の `version`（現在 `1.0.0+1`）がそのまま `versionName` / `versionCode` になる。
+出力は `build/app/outputs/flutter-apk/app-release.apk`。AAB が必要な場合は `flutter build appbundle`（出力は `build/app/outputs/bundle/release/app-release.aab`）。バージョンは `pubspec.yaml` の `version`（現在 `1.0.1+2`）がそのまま `versionName` / `versionCode` になる。
 
 ### 動作環境
 
@@ -218,11 +218,6 @@ release APK を `aapt dump permissions` で実測した結果は次のとおり�
 
 - BIZ UDPGothic — Copyright 2022 The BIZ UDGothic Project Authors
 - ライセンス: SIL Open Font License 1.1（全文は `assets/fonts/OFL.txt`。APK 内にも同梱）
-
-端末の CJK フォントフォールバックに任せると、漢字が**簡体字字形**で描画される端末がある
-（直・骨・次・令 などで顕著）。これを避けるため、日本語字形を持つフォントを同梱して固定し、
-併せて `MaterialApp` の `locale` を `ja` に宣言している。OFL 1.1 はアプリへの埋め込みを許諾し、
-アプリ本体のソース公開は要求しない（ライセンス全文の同梱が条件）。
 
 ## 無保証であることの注記
 
