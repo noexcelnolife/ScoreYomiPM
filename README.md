@@ -2,6 +2,17 @@
 
 特定の音楽ゲームのプレイ結果を、スマートフォンで撮った写真等から読み取って記録する Android アプリ。
 
+## インストール（Android）
+
+[Releases](https://github.com/noexcelnolife/ScoreYomiPM/releases/latest) から最新の APK をダウンロードし、端末で開いてインストールする。Google Play では配布していない。
+
+- 対応 OS: Android 7.0（API 24）以上
+- 「提供元不明のアプリ」からのインストールを許可する必要がある
+- 要求する権限は**カメラと通信用のみ**（ストレージ・マイク・位置情報は要求しない）
+- 記録は端末内に保存される。撮影した画像を外部へ送信する処理は無い
+
+> 各版の変更内容は [Releases](https://github.com/noexcelnolife/ScoreYomiPM/releases) のページに記載している。
+
 ## アプリの概要
 
 リザルト画面の写真を集めるだけで、曲名・難易度・スコア・判定内訳などのプレイ記録を端末内に記録していける。
