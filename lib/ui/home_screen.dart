@@ -12,6 +12,7 @@ import '../backup/backup_export_service.dart';
 import '../backup/backup_import_service.dart';
 import '../data/play_record.dart';
 import '../data/play_record_bulk_writer.dart';
+import '../data/memo_template_repository.dart';
 import '../data/play_record_repository.dart';
 import '../models/ocr_models.dart';
 import '../ocr/field_extractor.dart';
@@ -54,6 +55,7 @@ class HomeScreen extends StatefulWidget {
     this.additionalSongRepository,
     this.sharingIntentReceiver,
     this.captureLauncher,
+    this.memoTemplateRepository,
   });
 
   /// OCR 実行に使うエンジン。所有権は注入側（main.dart）にある。
@@ -99,6 +101,9 @@ class HomeScreen extends StatefulWidget {
   /// 「撮影成功 / fallback / 権限拒否 / ギャラリー / キャンセル」の分岐を
   /// 決定的に検証する（DIP）。null なら実装（Navigator push）を使う。
   final Future<CaptureOutcome?> Function()? captureLauncher;
+
+  /// メモのテンプレート供給元（入力画面・詳細画面へ経由渡し・任意）。
+  final MemoTemplateRepository? memoTemplateRepository;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -201,6 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
         // WHY: ライブ候補は 3 件で打ち切るため、目当ての曲が出ない場合に
         // 全件検索画面へ移れるようにする（ユーザー要望 2026-11-25）。
         onSongSearchWide: _liveSongSearch.searchWide,
+        memoTemplateRepository: widget.memoTemplateRepository,
       ),
     );
     // WHY(案1と同じ理由): 保存された記録を最近の記録セクションへ反映する。
@@ -218,6 +224,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ocrEngine: widget.ocrEngine,
         mainSongRepository: widget.mainSongRepository,
         additionalSongRepository: widget.additionalSongRepository,
+        memoTemplateRepository: widget.memoTemplateRepository,
       ),
     );
     // WHY(v4 案1): 一覧・詳細から戻ったら記録が変わっている可能性があるため
@@ -478,6 +485,7 @@ class _HomeScreenState extends State<HomeScreen> {
           onSongTitleSearch: _searchSongTitle,
           onSongEntryResolve: _resolveSongEntry,
           onSongSearchWide: _liveSongSearch.searchWide,
+          memoTemplateRepository: widget.memoTemplateRepository,
         ),
       );
       if (!mounted) {

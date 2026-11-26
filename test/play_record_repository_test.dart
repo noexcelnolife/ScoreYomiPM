@@ -193,6 +193,42 @@ void main() {
       expect(await repository.listAll(), hasLength(1));
     });
 
+    test('メモはドラフト値で上書きされ、空にすれば null に戻る', () async {
+      final FilePlayRecordRepository repository = createRepository();
+      final PlayRecord record = await repository.create(
+        PlayRecordDraft(
+          songName: 'メモ曲',
+          memo: '旧メモ',
+          status: PlayRecordStatus.pending,
+          source: PlayRecordSource.playshare,
+        ),
+        createSourceImage('result.jpg'),
+      );
+
+      await repository.update(
+        record.id,
+        PlayRecordDraft(
+          songName: 'メモ曲',
+          memo: '新メモ',
+          status: PlayRecordStatus.pending,
+          source: PlayRecordSource.playshare,
+        ),
+      );
+      expect((await repository.findById(record.id))!.memo, '新メモ');
+
+      // WHY: 修正画面でメモ欄を空にしたら消えるのが期待挙動（曲名と同じ規則）。
+      await repository.update(
+        record.id,
+        PlayRecordDraft(
+          songName: 'メモ曲',
+          memo: '',
+          status: PlayRecordStatus.pending,
+          source: PlayRecordSource.playshare,
+        ),
+      );
+      expect((await repository.findById(record.id))!.memo, isNull);
+    });
+
     test('曲名を空にして保存すると songName は null に戻る', () async {
       final FilePlayRecordRepository repository = createRepository();
       final File sourceImage = createSourceImage('result.jpg');
@@ -435,6 +471,44 @@ void main() {
       expect(restored.status, record.status);
       expect(restored.source, record.source);
       expect(restored.resultImagePath, record.resultImagePath);
+    });
+
+    test('メモは trim され、空文字は null として往復する', () async {
+      final FilePlayRecordRepository repository = createRepository();
+      final File sourceImage = createSourceImage('result.jpg');
+      final PlayRecord record = await repository.create(
+        PlayRecordDraft(
+          songName: 'メモ曲',
+          memo: '  精度重視\n',
+          status: PlayRecordStatus.pending,
+          source: PlayRecordSource.playshare,
+        ),
+        sourceImage,
+      );
+
+      expect(record.memo, '精度重視');
+      expect(PlayRecord.fromJson(record.toJson()).memo, '精度重視');
+
+      final PlayRecord blank = await repository.create(
+        PlayRecordDraft(
+          songName: '空メモ曲',
+          memo: '   ',
+          status: PlayRecordStatus.pending,
+          source: PlayRecordSource.playshare,
+        ),
+        createSourceImage('result2.jpg'),
+      );
+      expect(blank.memo, isNull, reason: '空白のみのメモは null');
+    });
+
+    test('メモを持たない旧 JSON は null として読める', () async {
+      final PlayRecord restored = PlayRecord.fromJson(<String, dynamic>{
+        'id': 'legacy-2',
+        'playedAt': '2026-11-22T10:00:00Z',
+        'resultImagePath': '/tmp/legacy.jpg',
+      });
+
+      expect(restored.memo, isNull);
     });
 
     test('欠落キー・未知キーでも復元できる（スキーマ進化許容）', () async {

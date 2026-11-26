@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'data/memo_template_repository.dart';
 import 'data/play_record_repository.dart';
 import 'ocr/downloaded_main_repository.dart';
 import 'ocr/local_additional_repository.dart';
@@ -47,6 +48,14 @@ Future<void> main() async {
     documentsDirectoryResolver: () async => documentsDirectory,
   );
 
+  // メモのテンプレート: records.json とは別ファイル（memo_templates/）に置く。
+  // WHY: 入力の補助データであり、記録のスキーマや読み書き経路に手を入れず、
+  // 破損時の影響範囲もテンプレート側だけに閉じられるようにする。
+  final MemoTemplateRepository memoTemplateRepository =
+      FileMemoTemplateRepository(
+        documentsDirectoryResolver: () async => documentsDirectory,
+      );
+
   // FR-1: 共有インテント受信機（冷温起動両対応）。
   final SharingIntentReceiver sharingIntentReceiver = SharingIntentReceiver();
 
@@ -58,6 +67,7 @@ Future<void> main() async {
       mainSongRepository: mainSongRepository,
       additionalSongRepository: additionalSongRepository,
       sharingIntentReceiver: sharingIntentReceiver,
+      memoTemplateRepository: memoTemplateRepository,
     ),
   );
 }
@@ -72,6 +82,7 @@ class ScoremanApp extends StatelessWidget {
     required this.mainSongRepository,
     required this.additionalSongRepository,
     required this.sharingIntentReceiver,
+    this.memoTemplateRepository,
   });
 
   /// ホーム画面へ渡す OCR エンジン。アプリ全体で単一インスタンスを使い回す。
@@ -96,6 +107,12 @@ class ScoremanApp extends StatelessWidget {
 
   /// FR-1: 共有インテント受信機（冷温起動両対応）。
   final SharingIntentReceiver sharingIntentReceiver;
+
+  /// メモのテンプレート供給元（任意）。
+  ///
+  /// WHY null 許容か: テンプレートはメモ入力の補助にすぎず、無くても入力・保存は
+  /// 成立する。null なら入力画面で「テンプレート」ボタンを出さない。
+  final MemoTemplateRepository? memoTemplateRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -123,6 +140,7 @@ class ScoremanApp extends StatelessWidget {
         mainSongRepository: mainSongRepository,
         additionalSongRepository: additionalSongRepository,
         sharingIntentReceiver: sharingIntentReceiver,
+        memoTemplateRepository: memoTemplateRepository,
       ),
     );
   }

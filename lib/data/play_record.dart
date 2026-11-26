@@ -76,7 +76,11 @@ int? normalizeIntValue(Object? raw, {required int min, required int max}) {
   return value;
 }
 
-String? _normalizeSongName(String? raw) {
+/// 曲名・メモのような任意の自由文を正規化する（trim し、空文字は null）。
+///
+/// WHY: 「空欄」を null に寄せておくと、JSON に `""` が残らないため
+/// 「値なし」の判定が 1 通りに定まる（曲名・メモの双方で同じ規則を使う）。
+String? _normalizeOptionalText(String? raw) {
   if (raw == null) {
     return null;
   }
@@ -104,6 +108,7 @@ class PlayRecord {
     required this.resultImagePath,
     this.difficulty,
     this.machine,
+    this.memo,
   });
 
   /// ユニークなレコード ID。
@@ -148,6 +153,13 @@ class PlayRecord {
   /// 機種（v5・availableGameVersions の値または null）。
   final String? machine;
 
+  /// このプレイについてのメモ（自由文・空欄は null）。
+  ///
+  /// WHY 記録に持たせるか: メモは「その 1 回のプレイ」に対する所感なので、
+  /// 曲や譜面ではなくレコードに属する。テンプレート側は入力の補助にすぎず、
+  /// ここには展開済みの本文だけを保存する（テンプレートを消してもメモは残る）。
+  final String? memo;
+
   /// 確定状態。
   final PlayRecordStatus status;
 
@@ -184,6 +196,7 @@ class PlayRecord {
     String? resultImagePath,
     GameDifficulty? difficulty,
     String? machine,
+    Object? memo = _unset,
   }) {
     return PlayRecord(
       id: id ?? this.id,
@@ -200,6 +213,7 @@ class PlayRecord {
       clearMedal: clearMedal ?? this.clearMedal,
       difficulty: difficulty ?? this.difficulty,
       machine: machine ?? this.machine,
+      memo: memo == _unset ? this.memo : memo as String?,
       status: status ?? this.status,
       source: source ?? this.source,
       resultImagePath: resultImagePath ?? this.resultImagePath,
@@ -222,6 +236,7 @@ class PlayRecord {
       'clearMedal': clearMedal,
       'difficulty': difficulty?.name,
       'machine': machine,
+      'memo': memo,
       'status': status.name,
       'source': source.name,
       'resultImagePath': resultImagePath,
@@ -250,6 +265,7 @@ class PlayRecord {
       clearMedal: json['clearMedal'] as String?,
       difficulty: GameDifficulty.values.asNameMap()[json['difficulty']],
       machine: json['machine'] as String?,
+      memo: _normalizeOptionalText(json['memo'] as String?),
       status:
           PlayRecordStatus.values.asNameMap()[json['status']] ??
           PlayRecordStatus.pending,
@@ -287,6 +303,7 @@ class PlayRecordDraft {
     this.clearMedal,
     this.difficulty,
     this.machine,
+    this.memo,
   });
 
   /// 曲名（trim・空欄は null に正規化される）。
@@ -331,13 +348,16 @@ class PlayRecordDraft {
   /// 機種（v5・availableGameVersions の値または null）。
   final String? machine;
 
+  /// メモ（trim・空欄は null に正規化される）。
+  final String? memo;
+
   /// 正規化済みの [PlayRecord] を生成する。
   PlayRecord toPlayRecord({
     required String id,
     required String resultImagePath,
     DateTime? playedAt,
   }) {
-    final String? normalizedSongName = _normalizeSongName(songName);
+    final String? normalizedSongName = _normalizeOptionalText(songName);
     return PlayRecord(
       id: id,
       playedAt: playedAt ?? DateTime.now(),
@@ -355,6 +375,7 @@ class PlayRecordDraft {
       clearMedal: clearMedal?.name,
       difficulty: difficulty,
       machine: machine,
+      memo: _normalizeOptionalText(memo),
       resultImagePath: resultImagePath,
     );
   }

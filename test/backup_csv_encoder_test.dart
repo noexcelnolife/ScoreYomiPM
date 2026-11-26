@@ -16,6 +16,7 @@ PlayRecord buildRecord({
   String? machine = 'H☆C!!',
   PlayRecordStatus status = PlayRecordStatus.confirmed,
   int? level = 44,
+  String? memo,
 }) {
   return PlayRecord(
     id: 'r1',
@@ -31,6 +32,7 @@ PlayRecord buildRecord({
     clearMedal: clearMedal,
     difficulty: difficulty,
     machine: machine,
+    memo: memo,
     status: status,
     source: PlayRecordSource.playshare,
     resultImagePath: '',
@@ -46,7 +48,7 @@ void main() {
 
     expect(
       lines.first.replaceFirst('\uFEFF', ''),
-      '実施日時,曲名,難易度,レベル,スコア,COOL,GREAT,GOOD,BAD,MAX COMBO,クリアメダル,機種,状態,記録元',
+      '実施日時,曲名,難易度,レベル,スコア,COOL,GREAT,GOOD,BAD,MAX COMBO,クリアメダル,機種,状態,記録元,メモ',
     );
   });
 
@@ -86,6 +88,16 @@ void main() {
     expect(cells[11], 'H☆C!!');
     expect(cells[12], '確定');
     expect(cells[13], 'プレーシェア');
+    expect(cells[14], '');
+  });
+
+  test('メモは末尾の列に出力され、改行を含んでも引用符で保持される', () {
+    final String csv = encoder.encode(<PlayRecord>[
+      buildRecord(memo: '精度重視\nBP 更新'),
+    ]);
+
+    // 記録元（14 列目）の直後＝最終列にメモが来ること。
+    expect(csv, contains('プレーシェア,"精度重視\nBP 更新"'));
   });
 
   test('null は空文字列として出力する', () {

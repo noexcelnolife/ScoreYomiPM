@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
 
+import '../data/memo_template_repository.dart';
 import '../data/play_record.dart';
 import '../data/play_record_repository.dart';
 import '../data/play_record_stats.dart';
@@ -33,6 +34,7 @@ class PlayRecordsScreen extends StatefulWidget {
     required this.ocrEngine,
     this.mainSongRepository,
     this.additionalSongRepository,
+    this.memoTemplateRepository,
   });
 
   /// 記録の保存先。
@@ -47,12 +49,16 @@ class PlayRecordsScreen extends StatefulWidget {
   /// 詳細画面の再 OCR へ渡すローカル追加 DB リポジトリ（経由渡し・任意注入）。
   final SongRepository? additionalSongRepository;
 
+  /// メモのテンプレート供給元（詳細画面の「修正」へ経由渡し・任意）。
+  final MemoTemplateRepository? memoTemplateRepository;
+
   /// この画面への [MaterialPageRoute] を生成する。
   static Route<void> route({
     required PlayRecordRepository playRecordRepository,
     required OcrEngine ocrEngine,
     SongRepository? mainSongRepository,
     SongRepository? additionalSongRepository,
+    MemoTemplateRepository? memoTemplateRepository,
   }) {
     return MaterialPageRoute<void>(
       builder: (_) => PlayRecordsScreen(
@@ -60,6 +66,7 @@ class PlayRecordsScreen extends StatefulWidget {
         ocrEngine: ocrEngine,
         mainSongRepository: mainSongRepository,
         additionalSongRepository: additionalSongRepository,
+        memoTemplateRepository: memoTemplateRepository,
       ),
     );
   }
@@ -598,6 +605,7 @@ class _PlayRecordsScreenState extends State<PlayRecordsScreen> {
         ocrEngine: widget.ocrEngine,
         mainSongRepository: widget.mainSongRepository,
         additionalSongRepository: widget.additionalSongRepository,
+        memoTemplateRepository: widget.memoTemplateRepository,
         recordId: record.id,
       ),
     );

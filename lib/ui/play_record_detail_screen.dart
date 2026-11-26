@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:material_ui/material_ui.dart';
 
 import '../best/self_best_resolver.dart';
+import '../data/memo_template_repository.dart';
 import '../data/play_record.dart';
 import '../data/play_record_repository.dart';
 import '../ocr/ocr_engine.dart';
@@ -29,6 +30,7 @@ class PlayRecordDetailScreen extends StatefulWidget {
     this.mainSongRepository,
     this.additionalSongRepository,
     this.fileExportGateway,
+    this.memoTemplateRepository,
   });
 
   /// 記録の保存先。
@@ -55,6 +57,12 @@ class PlayRecordDetailScreen extends StatefulWidget {
   /// 呼べない。未指定なら実端末向け実装を使い、テストでは fake を注入する。
   final FileExportGateway? fileExportGateway;
 
+  /// メモのテンプレート供給元（修正画面へ経由渡し・任意）。
+  ///
+  /// WHY この画面が持つか: メモの編集は「修正」＝[OcrResultScreen] で行うため、
+  /// ここで受け取ったものをそのまま渡す（渡さなければテンプレートボタンは出ない）。
+  final MemoTemplateRepository? memoTemplateRepository;
+
   /// この画面への [MaterialPageRoute] を生成する。
   static Route<void> route({
     required PlayRecordRepository playRecordRepository,
@@ -63,6 +71,7 @@ class PlayRecordDetailScreen extends StatefulWidget {
     SongRepository? mainSongRepository,
     SongRepository? additionalSongRepository,
     FileExportGateway? fileExportGateway,
+    MemoTemplateRepository? memoTemplateRepository,
   }) {
     return MaterialPageRoute<void>(
       builder: (_) => PlayRecordDetailScreen(
@@ -72,6 +81,7 @@ class PlayRecordDetailScreen extends StatefulWidget {
         mainSongRepository: mainSongRepository,
         additionalSongRepository: additionalSongRepository,
         fileExportGateway: fileExportGateway,
+        memoTemplateRepository: memoTemplateRepository,
       ),
     );
   }
@@ -350,11 +360,12 @@ class _PlayRecordDetailScreenState extends State<PlayRecordDetailScreen> {
           children: <Widget>[
             // 並び順（01a20b34・ユーザー指示 2026-11-24）:
             // クリアメダル → 難易度 → レベル → 曲名 → スコア → 判定内訳
-            // （COOL/GREAT/GOOD/BAD）→ MAX COMBO → 機種。
+            // （COOL/GREAT/GOOD/BAD）→ MAX COMBO → 機種 → メモ。
             // WHY: 入力画面と同じ並びに揃え、ゲーム内リザルト画面の順序に
             // 合わせる（旧順は難易度・機種がレベルより上にあり、入力画面の
-            // 新順と食い違っていた）。11 項目に含まれない 日時（ヘッダ情報）は
-            // 先頭、状態・記録元（メタ情報）は末尾に置く。
+            // 新順と食い違っていた）。日時（ヘッダ情報）は先頭、状態・記録元
+            // （メタ情報）は末尾。メモは 2026-11-26 に追加した自由文で、
+            // 値があるときだけ表示する。
             _fieldRow('日時', _formatPlayedAt(record.playedAt)),
             _fieldRow('メダル', _medalLabelText(record.clearMedal)),
             _fieldRow(
@@ -390,6 +401,9 @@ class _PlayRecordDetailScreenState extends State<PlayRecordDetailScreen> {
             // 判定内訳（COOL/GREAT/GOOD/BAD を 1 行に同居）・MAX COMBO・難易度
             // ・レベル・機種。日時・メダル・状態・記録元は確定スコープ外のため
             // 非対象（メダル行は詳細画面でも通常の Text 行、状態行は Chip）。
+            // メモ（2026-11-26 追加）は本文をそのまま持ち帰りたいので selectable
+            // に含める。上記の「8 値」は当時の確定スコープの記録であり、この
+            // 追加でメモが加わった。
             _fieldRow(
               '曲名',
               record.songName ?? '（曲名未入力）',
@@ -413,6 +427,12 @@ class _PlayRecordDetailScreenState extends State<PlayRecordDetailScreen> {
                   : record.machine!,
               selectable: record.machine != null && record.machine!.isNotEmpty,
             ),
+            // メモ（2026-11-26）: 値があるときだけ行を出す。WHY 空でも行を
+            // 出さないか: 詳細画面は「記録に何が入っているか」を読む場所で、
+            // 未入力のメモ行は情報量ゼロのまま視線を奪うため。本文は長くなり
+            // うるのでコピーできるよう SelectableText にする。
+            if (record.memo != null && record.memo!.isNotEmpty)
+              _fieldRow('メモ', record.memo!, selectable: true),
             _fieldRow(
               '状態',
               '',
@@ -546,6 +566,7 @@ class _PlayRecordDetailScreenState extends State<PlayRecordDetailScreen> {
         onSongTitleSearch: _songTitleSearch.search,
         onSongEntryResolve: _songTitleSearch.resolve,
         onSongSearchWide: _songTitleSearch.searchWide,
+        memoTemplateRepository: widget.memoTemplateRepository,
       ),
     );
     if (mounted) {
@@ -587,6 +608,7 @@ class _PlayRecordDetailScreenState extends State<PlayRecordDetailScreen> {
           onSongTitleSearch: _songTitleSearch.search,
           onSongEntryResolve: _songTitleSearch.resolve,
           onSongSearchWide: _songTitleSearch.searchWide,
+          memoTemplateRepository: widget.memoTemplateRepository,
         ),
       );
     } catch (error) {

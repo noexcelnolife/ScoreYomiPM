@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
 
+import '../data/memo_template.dart';
+import '../data/memo_template_repository.dart';
 import '../data/play_record.dart';
 import '../data/play_record_repository.dart';
 import '../models/ocr_models.dart';
@@ -12,6 +14,7 @@ import '../validation/play_record_validator.dart';
 import '../validation/validation_issue.dart';
 import 'difficulty_color.dart';
 import 'difficulty_levels.dart';
+import 'memo_template_sheet.dart';
 import 'song_level_picker.dart';
 import 'song_search_screen.dart';
 
@@ -81,6 +84,7 @@ class OcrResultScreen extends StatefulWidget {
     this.onSongTitleSearch,
     this.onSongEntryResolve,
     this.onSongSearchWide,
+    this.memoTemplateRepository,
   });
 
   /// OCR にかけた元画像（確認用プレビュー表示に使用する）。
@@ -157,6 +161,13 @@ class OcrResultScreen extends StatefulWidget {
   /// 後方互換設計（既存の呼び出し側・テストは無変更で通る）。
   final Future<List<SongEntry>> Function(String query)? onSongSearchWide;
 
+  /// メモのテンプレート（プリセット）の供給元。
+  ///
+  /// WHY null 許容か: テンプレートはメモ入力の補助にすぎず、無くても入力・保存は
+  /// 成立する。null なら「テンプレート」ボタンを出さない（既存の呼び出し側と
+  /// テストは無変更で通る後方互換設計。onSongTitleSearch 等と同型）。
+  final MemoTemplateRepository? memoTemplateRepository;
+
   /// この画面への [MaterialPageRoute] を生成する。
   ///
   /// WHY(v4 案2): 写真なし手入力では [imageFile] を省略する。
@@ -173,6 +184,7 @@ class OcrResultScreen extends StatefulWidget {
     Future<SongMatchResult?> Function(String title)? onSongTitleSearch,
     Future<SongEntry?> Function(String normalizedTitle)? onSongEntryResolve,
     Future<List<SongEntry>> Function(String query)? onSongSearchWide,
+    MemoTemplateRepository? memoTemplateRepository,
   }) {
     return MaterialPageRoute<void>(
       builder: (_) => OcrResultScreen(
@@ -188,6 +200,7 @@ class OcrResultScreen extends StatefulWidget {
         onSongTitleSearch: onSongTitleSearch,
         onSongEntryResolve: onSongEntryResolve,
         onSongSearchWide: onSongSearchWide,
+        memoTemplateRepository: memoTemplateRepository,
       ),
     );
   }
@@ -274,6 +287,10 @@ class _OcrResultScreenState extends State<OcrResultScreen> {
     // のリスナーは発火するため、初期値を検索済みにしておかないと初フォーカス
     // で無意味な再検索が走る（テキスト変更時のみ再検索する）。
     _lastSearchedTitle = _controllers['songName']?.text.trim();
+    // メモ: 他フィールドと同じく常にコントローラを用意する（手入力モードでも
+    // 既存レコードの復元値を受けられるようにする）。検証対象外の自由文なので
+    // 数値検証リスナーは付けない。
+    _controllers['memo'] = TextEditingController();
     // FR-4: 既存レコードの復元（手入力・修正モード）。読み込みは非同期のため、
     // 到着した時点でコントローラへ反映する。
     //
@@ -309,6 +326,9 @@ class _OcrResultScreenState extends State<OcrResultScreen> {
     _controllers['maxCombo']?.text = record.maxCombo?.toString() ?? '';
     _controllers['level']?.text = record.level?.toString() ?? '';
     _controllers['songName']?.text = record.songName ?? '';
+    // WHY: メモも復元対象に含める。保存は draft 全量上書きのため、復元しないと
+    // 「修正」で開いて保存しただけでメモが消える（データ損失になる）。
+    _controllers['memo']?.text = record.memo ?? '';
     if (record.clearMedal != null) {
       try {
         _selectedMedal = ClearMedalCategory.values.firstWhere(
@@ -712,6 +732,9 @@ class _OcrResultScreenState extends State<OcrResultScreen> {
             onDifficultyChanged: _onDifficultyChanged,
             machine: _machine,
             onMachineChanged: _onMachineChanged,
+            onSelectMemoTemplate: widget.memoTemplateRepository == null
+                ? null
+                : _insertMemoTemplate,
           ),
         ],
       ),
@@ -807,6 +830,9 @@ class _OcrResultScreenState extends State<OcrResultScreen> {
         onDifficultyChanged: _onDifficultyChanged,
         machine: _machine,
         onMachineChanged: _onMachineChanged,
+        onSelectMemoTemplate: widget.memoTemplateRepository == null
+            ? null
+            : _insertMemoTemplate,
       );
       // WHY: 読めない画像（0 要素）でもフィールドセクションに着地するため
       // 「読めなかった」ことが伝わらない（smoke test 不便③・修正②）。
@@ -972,6 +998,32 @@ class _OcrResultScreenState extends State<OcrResultScreen> {
   /// [PlayRecordDraft.toPlayRecord] の normalizeIntValue に一任する。
   /// 曲名はトリム後の空文字なら未確定（pending）とする
   /// （[PlayRecord.deriveStatus] と同じ規則）。
+  /// テンプレート選択シートを開き、選ばれた本文をメモ欄の末尾へ差し込む。
+  Future<void> _insertMemoTemplate() async {
+    final MemoTemplateRepository? repository = widget.memoTemplateRepository;
+    if (repository == null) {
+      return;
+    }
+    final String? body = await showMemoTemplateSheet(
+      context: context,
+      repository: repository,
+    );
+    final TextEditingController? controller = _controllers['memo'];
+    if (body == null || controller == null || !mounted) {
+      return;
+    }
+    // WHY 末尾へ追記するか: カーソル位置への挿入は、メモ欄が未フォーカスのとき
+    // selection が不正値になり挿入位置が定まらない。追記なら挙動が常に一意で、
+    // 複数のテンプレートを続けて積む使い方にも合う。既存文とは改行で区切る。
+    final String current = controller.text;
+    final String inserted = current.isEmpty ? body : '$current\n$body';
+    controller.value = TextEditingValue(
+      text: inserted,
+      selection: TextSelection.collapsed(offset: inserted.length),
+    );
+    setState(() {});
+  }
+
   PlayRecordDraft _buildDraft() {
     final String songName = _controllers['songName']?.text.trim() ?? '';
     final bool hasSongName = songName.isNotEmpty;
@@ -991,6 +1043,7 @@ class _OcrResultScreenState extends State<OcrResultScreen> {
       clearMedal: _selectedMedal,
       difficulty: _difficulty,
       machine: _machine,
+      memo: _controllers['memo']?.text,
     );
   }
 
@@ -1092,6 +1145,7 @@ class _FieldSection extends StatelessWidget {
     this.onDifficultyChanged,
     this.machine,
     this.onMachineChanged,
+    this.onSelectMemoTemplate,
   });
 
   final FieldExtractionResult? extractionResult;
@@ -1149,6 +1203,11 @@ class _FieldSection extends StatelessWidget {
   /// v5 機能 A: 機種選択変更時のコールバック。
   final ValueChanged<String?>? onMachineChanged;
 
+  /// メモ欄の「テンプレート」ボタン押下時のコールバック。
+  ///
+  /// null ならボタンを出さない（テンプレート未設定の環境でも入力・保存は成立する）。
+  final VoidCallback? onSelectMemoTemplate;
+
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
@@ -1164,11 +1223,13 @@ class _FieldSection extends StatelessWidget {
               const SizedBox(height: 8),
               // 並び順（01a20b34・ユーザー指示 2026-11-24）:
               // クリアメダル → 難易度 → レベル → 曲名 → スコア → COOL →
-              // GREAT → GOOD → BAD → MAX COMBO → 機種。
+              // GREAT → GOOD → BAD → MAX COMBO → 機種 → メモ。
               // WHY: 旧順（スコア・MAX COMBO・レベル…）はリザルト画面と全く
               // 異なり直感的でない、というユーザー指摘に合わせ、ゲーム内の
               // リザルト画面と同じ並びにする。表示順のみの変更で、key・ラベル・
               // 保存パス・検証ロジックは不変。
+              // メモだけはリザルト画面に対応物が無い補足情報のため、数値・選択
+              // 項目をすべて確認し終えた末尾に置く（2026-11-26 追加）。
               _medalRow(theme),
               // v5 機能 A: 難易度・機種の選択行。解除用チップ（null）を先頭に
               // 置く規約は維持する。
@@ -1218,6 +1279,7 @@ class _FieldSection extends StatelessWidget {
                 label: '機種',
                 children: _machineChips(),
               ),
+              _memoRow(theme),
               if (playRecordRepository != null) ...<Widget>[
                 const SizedBox(height: 12),
                 FilledButton(
@@ -1258,8 +1320,52 @@ class _FieldSection extends StatelessWidget {
     );
   }
 
-  /// FR-3 / v2A: クリアメダル選択行。
+  /// メモ入力行（自由文）。テンプレートの供給元があれば差し込みボタンも出す。
   ///
+  /// WHY テンプレートボタンをラベル行の右に置くか: メモ欄の中（suffixIcon）に
+  /// 入れると複数行入力の本文領域を圧迫する。行頭ラベルと同じ高さに逃がすと
+  /// 「メモに対する操作」であることが読み取れて、本文の表示幅も保てる。
+  Widget _memoRow(ThemeData theme) {
+    final TextEditingController? controller = controllers['memo'];
+    if (controller == null) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(child: Text('メモ', style: theme.textTheme.labelSmall)),
+              if (onSelectMemoTemplate != null)
+                TextButton.icon(
+                  key: const ValueKey<String>('memo-template-button'),
+                  onPressed: onSelectMemoTemplate,
+                  icon: const Icon(Icons.playlist_add, size: 18),
+                  label: const Text('テンプレート'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          TextField(
+            key: const ValueKey<String>('memo-field'),
+            controller: controller,
+            minLines: 2,
+            maxLines: 6,
+            maxLength: MemoTemplate.bodyMaxLength,
+            decoration: const InputDecoration(
+              hintText: 'このプレイについてのメモ（任意）',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// FR-3 / v2A: クリアメダル選択行。
   /// WHY(01a20b34): ユーザー指定の先頭項目になったため、行の組み立てを
   /// メソッドへ切り出して build の並び順を読みやすくする。ChoiceChip は
   /// 解除経路（未設定チップ「—」）を先頭に配置し、誤選択を元に戻せる
