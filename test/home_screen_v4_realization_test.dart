@@ -144,11 +144,11 @@ void main() {
     expect(ctaRect.top, lessThan(songDbRect.top));
   });
 
-  testWidgets('(3) FR-8 失効ガイド文言は文言不変で表示される', (WidgetTester tester) async {
+  testWidgets('(3) FR-8 失効ガイドの文言を完全一致で固定する', (WidgetTester tester) async {
     await tester.pumpWidget(homeWidget(FakePlayRecordRepository()));
     await tester.pumpAndSettle();
 
-    expect(find.text('画像は約6日で見られなくなるため、お早めに取り込みください'), findsOneWidget);
+    expect(find.text('プレーシェアは一定期間で見られなくなるため、お早めに取り込みください'), findsOneWidget);
   });
 
   testWidgets('(4) SongDbSection は折りたたみがデフォルトで、展開すると入力欄が出る', (

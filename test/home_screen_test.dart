@@ -206,7 +206,7 @@ void main() {
     expect(find.text('記録はありません'), findsOneWidget);
   });
 
-  testWidgets('プレーシェア画像の失効ガイド（約6日）を表示する（FR-8）', (WidgetTester tester) async {
+  testWidgets('プレーシェア画像の失効ガイドを表示する（FR-8）', (WidgetTester tester) async {
     final File image = createTestImageFile();
     final FakePlayRecordRepository repository = FakePlayRecordRepository();
 
@@ -222,7 +222,9 @@ void main() {
     );
 
     // FR-8: 画像選択ボタン直下に常設ガイド 1 行を出す（設計 §1/§2）。
-    expect(find.textContaining('約6日'), findsOneWidget);
+    // WHY 日数で検索しないか: 失効までの日数はプレーシェア側の仕様なので、
+    // アプリの文言では断定しない（2026-11-26 ユーザー変更）。
+    expect(find.textContaining('プレーシェアは一定期間で見られなくなる'), findsOneWidget);
   });
 
   testWidgets('失効ガイド文言は確定文言どおりに表示される（FR-8・文言固定）', (WidgetTester tester) async {
@@ -240,8 +242,8 @@ void main() {
       ),
     );
 
-    // FR-8: 文言は設計確認書 §3 で確定・変更時は設計書更新を経る（完全一致固定）。
-    expect(find.text('画像は約6日で見られなくなるため、お早めに取り込みください'), findsOneWidget);
+    // FR-8: 文言は完全一致で固定する（変更はユーザー判断）。
+    expect(find.text('プレーシェアは一定期間で見られなくなるため、お早めに取り込みください'), findsOneWidget);
   });
 
   testWidgets('OCR 成功で編集画面から戻ったあとは、プレビューをクリアする（v2 UX 改修1）', (

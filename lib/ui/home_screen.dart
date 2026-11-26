@@ -954,7 +954,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// OCR 実行中はローディング表示、それ以外は画像選択ボタンを表示する。
   ///
-  /// FR-8: プレーシェア画像の失効（約6日）をボタン直下に常設ガイドする
+  /// FR-8: プレーシェア画像の失効をボタン直下に常設ガイドする
   ///（案1・ユーザー確定 2026-11-22・設計確認書 §1/§2）。OCR 実行中はボタンごと
   /// スピナーに置換されるため、ガイドも自然に消える（追加分岐なし）。
   Widget _buildActionSection(ThemeData theme) {
@@ -980,11 +980,13 @@ class _HomeScreenState extends State<HomeScreen> {
           label: const Text('画像を取り込む'),
         ),
         const SizedBox(height: 12),
-        // FR-8: 失効ガイド。文言は設計確認書 §3 で確定・テストで完全一致固定
-        //（変更時は docs/fr8_playshare_expiry_guide_design_confirmation_2026-11-22.md
-        // を経由）。「取り込み」表現に統一し「撮影」には言及しない（FR-9 整合）。
+        // FR-8: 失効ガイド。文言はユーザー確定（2026-11-22 に設計確認書 §3 で確定、
+        // 2026-11-26 に「約6日」→「一定期間」へ変更）。テストで完全一致固定している。
+        // WHY 日数を書かないか: 失効までの日数はプレーシェア側の仕様で、こちらが
+        // 断定すると変わった時に誤った情報を出し続けることになる。
+        // 「取り込み」表現に統一し「撮影」には言及しない（FR-9 整合）。
         Text(
-          '画像は約6日で見られなくなるため、お早めに取り込みください',
+          'プレーシェアは一定期間で見られなくなるため、お早めに取り込みください',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.secondary,
           ),
