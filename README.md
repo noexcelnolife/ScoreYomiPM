@@ -174,7 +174,7 @@ flutter run
 flutter build apk --release
 ```
 
-出力は `build/app/outputs/flutter-apk/app-release.apk`。AAB が必要な場合は `flutter build appbundle`（出力は `build/app/outputs/bundle/release/app-release.aab`）。バージョンは `pubspec.yaml` の `version`（現在 `1.0.2+3`）がそのまま `versionName` / `versionCode` になる。
+出力は `build/app/outputs/flutter-apk/app-release.apk`。AAB が必要な場合は `flutter build appbundle`（出力は `build/app/outputs/bundle/release/app-release.aab`）。バージョンは `pubspec.yaml` の `version`（現在 `1.0.3+4`）がそのまま `versionName` / `versionCode` になる。
 
 ### リリースビルドに関する注意
 
