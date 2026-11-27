@@ -12,6 +12,8 @@ import 'ocr/ocr_engine.dart';
 import 'ocr/song_repository.dart';
 import 'songdb/song_database_service.dart';
 import 'songdb/song_db_paths.dart';
+import 'platform/blob_store.dart';
+import 'platform/io_blob_store.dart';
 import 'ui/home_screen.dart';
 import 'ui/sharing_intent_receiver.dart';
 
@@ -42,10 +44,12 @@ Future<void> main() async {
   );
 
   // FR-4: プレイ記録の保存先。records.json と画像は documents 配下に置く。
-  // WHY: ディレクトリ解決は実行環境依存のため関数として注入し、テストでは
-  // 一時ディレクトリへ差し替え可能にする（DIP、SongDatabaseService と同型）。
+  // WHY(ルートを documents にするか): キーは records/records.json と
+  // records/images/<name> になり、v1.0.3 以前の配置とそのまま一致する。
+  // ここを records/ や images/ に変えると、既存端末の記録・画像が読めなくなる。
+  final BlobStore blobStore = IoBlobStore(documentsDirectory);
   final PlayRecordRepository playRecordRepository = FilePlayRecordRepository(
-    documentsDirectoryResolver: () async => documentsDirectory,
+    blobStore: blobStore,
   );
 
   // メモのテンプレート: records.json とは別ファイル（memo_templates/）に置く。

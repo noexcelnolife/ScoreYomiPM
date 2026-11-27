@@ -7,7 +7,7 @@
 // (d) 戻る（選択なし）では曲名欄が変わらない
 // (e) ライブ候補が並んでいる行に「もっと探す」が出て、同じ画面へ行ける
 
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -102,7 +102,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
         ),
@@ -127,7 +127,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           onSongSearchWide: search,
@@ -159,7 +159,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           onSongSearchWide: search,
@@ -205,7 +205,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           onSongSearchWide: search,
@@ -239,7 +239,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           onSongTitleSearch: liveSearch,
@@ -283,7 +283,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           onSongSearchWide: search,
@@ -324,7 +324,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           onSongSearchWide: search,
@@ -369,7 +369,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           onSongSearchWide: search,
@@ -404,7 +404,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           onSongTitleSearch: liveSearch,

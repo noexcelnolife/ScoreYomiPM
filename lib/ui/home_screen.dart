@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'sharing_intent_receiver.dart';
 
@@ -395,7 +396,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // FR-4: OCR 実行系の失敗のみ、画像を失わないよう未確定レコードとして
       // 自動保存する（設計書 §4 フロー 2）。想定外のエラーは従来どおり
       // メッセージ表示のみとする。
-      await _savePendingOnFailure(imageFile);
+      await _savePendingOnFailure(await imageFile.readAsBytes());
       return _OcrRunOutcome.failure('OCRの実行に失敗しました: ${error.message}');
     } catch (error) {
       // WHY: PoC では想定外の例外も握りつぶさず、エラーカードへ出して
@@ -409,7 +410,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// WHY: プレーシェア画像は一度きりの情報源で、失敗時に破棄すると手入力の
   /// 機会を失う。自動保存自体の失敗はログのみに留め、元の OCR 失敗メッセージ
   /// 表示を優先させる（二重のエラー演出をしない）。
-  Future<void> _savePendingOnFailure(File imageFile) async {
+  Future<void> _savePendingOnFailure(Uint8List imageBytes) async {
     try {
       await widget.playRecordRepository.create(
         PlayRecordDraft(
@@ -417,7 +418,7 @@ class _HomeScreenState extends State<HomeScreen> {
           status: PlayRecordStatus.pending,
           source: PlayRecordSource.playshare,
         ),
-        imageFile,
+        imageBytes,
       );
     } catch (error) {
       developer.log('未確定レコードの自動保存に失敗: $error');
@@ -475,7 +476,10 @@ class _HomeScreenState extends State<HomeScreen> {
     if (pageResult != null) {
       await Navigator.of(context).push(
         OcrResultScreen.route(
-          imageFile: imageFile,
+          // WHY(ここで読まないか): 原画像の読み込みは実 I/O。遷移の直前に
+          // await すると、画面が出るまでディスク待ちになる。読むのは遷移先
+          // （プレビュー表示と保存の直前）に任せ、関数だけ渡す。
+          loadImageBytes: imageFile.readAsBytes,
           pageResult: pageResult,
           extractionResult: outcome.extractionResult,
           songMatchResult: outcome.songMatchResult,

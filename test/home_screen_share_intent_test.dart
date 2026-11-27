@@ -26,6 +26,7 @@ import 'package:scoreyomipm/ui/sharing_intent_receiver.dart';
 
 import 'fake_ocr_engine.dart';
 import 'fake_play_record_repository.dart';
+import 'real_async_helper.dart';
 import 'test_image_helper.dart';
 import 'root_bundle_warmup.dart';
 
@@ -96,9 +97,9 @@ void main() {
   testWidgets('冷起動: 初期共有画像あり → OCR 成功 → OcrResultScreen へ遷移する', (
     WidgetTester tester,
   ) async {
-    final File image = createTestImageFile();
+    createTestImageFile();
     final _StubSharingIntentReceiver receiver = _StubSharingIntentReceiver(
-      initialPath: image.path,
+      initialPath: createTestImageFile().path,
     );
 
     await tester.pumpWidget(
@@ -128,7 +129,10 @@ void main() {
   testWidgets('温起動: imagePathStream の共有 → OCR 成功 → OcrResultScreen へ遷移する', (
     WidgetTester tester,
   ) async {
-    final File image = createTestImageFile();
+    // WHY(実ファイルを渡すか): 共有インテントが渡してくるのは実ファイルで、
+    // 保存経路はその readAsBytes を伴う。存在しないパスでは「読めなかった」
+    // 場合しか検証できない。
+    final File successImage = createTestImageFile();
     final _StubSharingIntentReceiver receiver = _StubSharingIntentReceiver();
 
     await tester.pumpWidget(
@@ -145,7 +149,7 @@ void main() {
     );
 
     // 温起動: アプリがメモリ上にある状態で共有された画像がストリームへ流れる。
-    receiver.streamController.add(image.path);
+    receiver.streamController.add(successImage.path);
     await tester.pump();
     await tester.pumpAndSettle();
 
@@ -155,7 +159,7 @@ void main() {
   testWidgets('温起動: OCR 失敗 → 未確定レコード自動保存（FR-4）＋エラー表示・遷移しない', (
     WidgetTester tester,
   ) async {
-    final File image = createTestImageFile();
+    final File sharedImage = createTestImageFile();
     final _StubSharingIntentReceiver receiver = _StubSharingIntentReceiver();
     final FakePlayRecordRepository repository = FakePlayRecordRepository();
 
@@ -170,11 +174,12 @@ void main() {
       ),
     );
 
-    receiver.streamController.add(image.path);
+    receiver.streamController.add(sharedImage.path);
     await tester.pump();
-    await tester.pumpAndSettle();
-
-    // FR-4: 共有インテント経由の OCR 失敗でも画像だけの未確定レコードが
+    // WHY(実 I/O を回すか): OCR 失敗時の未確定レコード保存は原画像の
+    // readAsBytes を伴い、これは実 I/O。FakeAsync の下では完了しないため、
+    // 実時間を進めないと保存が起きないまま検証してしまう。
+    await pumpThroughRealIo(tester);
     // 自動保存される（プレーシェアは一度きりの情報源のため）。
     expect(repository.createdDrafts, hasLength(1));
     expect(repository.createdDrafts.single.status, PlayRecordStatus.pending);

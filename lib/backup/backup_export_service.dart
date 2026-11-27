@@ -3,7 +3,6 @@
 // WHY: ZIP と CSV は保存先選択（UI 側）に渡すバイト列/文字列として作り、
 // この層では保存ダイアログを出さない。UI とデータ層の責務を分けておくと、
 // 保存先の選択ミスや権限エラーを UI 側で一元的に扱える。
-import 'dart:io';
 import 'dart:typed_data';
 
 import '../data/memo_template.dart';
@@ -68,16 +67,21 @@ class BackupExportService {
       if (record.resultImagePath.isEmpty) {
         continue;
       }
-      final File file = File(record.resultImagePath);
-      // WHY: 画像ファイルが既に消えている場合（手動削除・OS の掃除）でも
-      // バックアップ自体は作れるようにし、そのレコードは画像なしとして扱う。
-      if (!await file.exists()) {
+      // WHY(リポジトリ経由で読むか): resultImagePath は basename で、実体の
+      // 位置は保存先（端末のディスク / ブラウザの IndexedDB）ごとに違う。
+      // ここで File を直接開くと Web で必ず失敗し、画像なしのバックアップが
+      // 黙って出来上がる。保存先の知識はリポジトリに閉じ込める。
+      final Uint8List? bytes = await _repository.readImage(
+        record.resultImagePath,
+      );
+      // WHY: 画像が既に消えている場合（手動削除・OS の掃除）でもバックアップ
+      // 自体は作れるようにし、そのレコードは画像なしとして扱う。
+      if (bytes == null) {
         continue;
       }
       // WHY: ZIP 内の画像名はレコード id を stem にして、復元時にレコードと
       // 確実に対応づけられるようにする。
-      images['${record.id}.${_imageExtension(record.resultImagePath)}'] =
-          await file.readAsBytes();
+      images['${record.id}.${_imageExtension(record.resultImagePath)}'] = bytes;
     }
     return images;
   }

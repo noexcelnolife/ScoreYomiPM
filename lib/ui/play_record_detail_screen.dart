@@ -249,22 +249,34 @@ class _PlayRecordDetailScreenState extends State<PlayRecordDetailScreen> {
         // 原則を踏襲する。表示枠（高さ 240）は変えず、変換は枠内に留める。
         // 共通ウィジェットへの抽出はしない（KISS: 使い先の枠サイズ・レイアウト
         // が異なるため、重複 10 行程度の直書きを許容する）。
-        child: InteractiveViewer(
-          minScale: 1.0,
-          maxScale: 3.0,
-          child: Image.file(
-            File(record.resultImagePath),
-            fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => const Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Icon(Icons.broken_image_outlined),
-                SizedBox(height: 8),
-                Text('画像ファイルが見つかりません'),
-              ],
-            ),
-          ),
-        ),
+        child: record.resultImagePath.isEmpty
+            ? const Center(child: Text('画像なし'))
+            : FutureBuilder<Uint8List?>(
+                future: widget.playRecordRepository.readImage(
+                  record.resultImagePath,
+                ),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final Uint8List? bytes = snapshot.data;
+                  if (bytes == null) {
+                    // WHY(同じ表示を使うか): 「保存先に無い」と「壊れていて
+                    // 描けない」は、ユーザーから見れば同じ「画像が無い」。
+                    // 文言を分けても取れる行動は変わらないため 1 つに揃える。
+                    return Center(child: _imageFallback());
+                  }
+                  return InteractiveViewer(
+                    minScale: 1.0,
+                    maxScale: 3.0,
+                    child: Image.memory(
+                      bytes,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, _, _) => _imageFallback(),
+                    ),
+                  );
+                },
+              ),
       ),
     );
   }
@@ -285,7 +297,8 @@ class _PlayRecordDetailScreenState extends State<PlayRecordDetailScreen> {
 
   /// 原画像を読み、保存ダイアログで書き出す。
   Future<void> _exportImage(PlayRecord record) async {
-    final Uint8List? bytes = await _readImageBytes(record.resultImagePath);
+    final Uint8List? bytes =
+        await widget.playRecordRepository.readImage(record.resultImagePath);
     if (!mounted) {
       return;
     }
@@ -326,7 +339,8 @@ class _PlayRecordDetailScreenState extends State<PlayRecordDetailScreen> {
 
   /// 原画像を共有シートへ渡す。
   Future<void> _shareImage(PlayRecord record) async {
-    final Uint8List? bytes = await _readImageBytes(record.resultImagePath);
+    final Uint8List? bytes =
+        await widget.playRecordRepository.readImage(record.resultImagePath);
     if (!mounted) {
       return;
     }
@@ -356,23 +370,6 @@ class _PlayRecordDetailScreenState extends State<PlayRecordDetailScreen> {
       if (mounted) {
         _showSnackBar('共有できませんでした');
       }
-    }
-  }
-
-  /// 原画像のバイト列を読む。存在しない・読めない場合は null。
-  ///
-  /// WHY: 存在確認と読み込みは別の操作なので、確認直後にファイルが消えた
-  /// 場合や権限エラーも同じ「見つかりません」表示に寄せる（利用者にとって
-  /// 結果は同じで、どちらも保存できる画像が無い）。
-  Future<Uint8List?> _readImageBytes(String path) async {
-    final File file = File(path);
-    try {
-      if (!await file.exists()) {
-        return null;
-      }
-      return await file.readAsBytes();
-    } on FileSystemException {
-      return null;
     }
   }
 
@@ -628,10 +625,11 @@ class _PlayRecordDetailScreenState extends State<PlayRecordDetailScreen> {
     await Navigator.of(context).push(
       OcrResultScreen.route(
         // WHY(v4 案2): 写真なし手入力のレコード（空パス）は原画像を渡せない
-        // ため null にする（プレビューも非表示になる）。
-        imageFile: record.resultImagePath.isEmpty
+        // ため null にする（プレビューも非表示になる）。実体の置き場は保存先
+        // ごとに違うので、パスではなくリポジトリのキーで読み出す。
+        imageBytes: record.resultImagePath.isEmpty
             ? null
-            : File(record.resultImagePath),
+            : await widget.playRecordRepository.readImage(record.resultImagePath),
         playRecordRepository: widget.playRecordRepository,
         existingRecordId: widget.recordId,
         appBarTitle: 'スコア修正',
@@ -666,7 +664,9 @@ class _PlayRecordDetailScreenState extends State<PlayRecordDetailScreen> {
       }
       await Navigator.of(context).push(
         OcrResultScreen.route(
-          imageFile: File(record.resultImagePath),
+          imageBytes: record.resultImagePath.isEmpty
+            ? null
+            : await widget.playRecordRepository.readImage(record.resultImagePath),
           pageResult: pipelineContext.pageResult,
           extractionResult: pipelineContext.extractionResult,
           songMatchResult: pipelineContext.songMatchResult,
@@ -782,4 +782,20 @@ String _medalLabelText(String? clearMedalName) {
     default:
       return '—';
   }
+}
+
+/// 画像を表示できないときのプレースホルダ。
+///
+/// WHY(1 つにまとめるか): 「保存先に無い」「復元できていない」「バイト列が
+/// 壊れている」は原因が違うだけで、ユーザーにできることは同じ（記録は読める、
+/// 画像だけ諦める）。文言を分けると対処できるかのように見えてしまう。
+Widget _imageFallback() {
+  return const Column(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: <Widget>[
+      Icon(Icons.broken_image_outlined),
+      SizedBox(height: 8),
+      Text('画像が見つかりません'),
+    ],
+  );
 }

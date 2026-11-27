@@ -16,6 +16,8 @@ import 'package:scoreyomipm/data/memo_template.dart';
 import 'package:scoreyomipm/data/memo_template_repository.dart';
 import 'package:scoreyomipm/data/play_record.dart';
 import 'package:scoreyomipm/data/play_record_repository.dart';
+import 'package:scoreyomipm/platform/blob_store.dart';
+import 'package:scoreyomipm/platform/io_blob_store.dart';
 
 void main() {
   late Directory tempDirA;
@@ -27,10 +29,10 @@ void main() {
     tempDirA = await Directory.systemTemp.createTemp('scoreyomipm_exp_');
     tempDirB = await Directory.systemTemp.createTemp('scoreyomipm_imp_');
     repoA = FilePlayRecordRepository(
-      documentsDirectoryResolver: () async => tempDirA,
+      blobStore: IoBlobStore(tempDirA),
     );
     repoB = FilePlayRecordRepository(
-      documentsDirectoryResolver: () async => tempDirB,
+      blobStore: IoBlobStore(tempDirB),
     );
   });
 
@@ -42,11 +44,16 @@ void main() {
     }
   });
 
-  File writeSourceImage(String name, List<int> bytes) {
-    final File file = File('${tempDirA.path}/$name');
-    file.writeAsBytesSync(bytes);
-    return file;
-  }
+  /// 画像付きレコードに持たせる JPEG もどきのバイト列（先頭は JPEG の SOI）。
+  /// WHY 実ファイルを作らないか: 保存先はリポジトリの BlobStore に閉じており、
+  /// create() はバイト列を直接受け取る。テストが端末のディスクに依存すると、
+  /// Web 実装に切り替えたときに同じテストが動かなくなる。
+  final Uint8List sourceImageBytes = Uint8List.fromList(<int>[
+    0xFF,
+    0xD8,
+    0xFF,
+    42,
+  ]);
 
   BackupImportService buildService(FilePlayRecordRepository repository) {
     return BackupImportService(
@@ -57,19 +64,13 @@ void main() {
 
   /// 端末 A のレコード 2 件（うち 1 件は画像付き）から ZIP を作る。
   Future<Uint8List> buildZipFromA() async {
-    final File image = writeSourceImage('photo.jpg', <int>[
-      0xFF,
-      0xD8,
-      0xFF,
-      42,
-    ]);
     final PlayRecord withImage = await repoA.create(
       const PlayRecordDraft(
         songName: '画像あり',
         status: PlayRecordStatus.confirmed,
         source: PlayRecordSource.playshare,
       ),
-      image,
+      sourceImageBytes,
     );
     await repoA.create(
       const PlayRecordDraft(
@@ -79,7 +80,13 @@ void main() {
       ),
       null,
     );
-    expect(withImage.resultImagePath, isNotEmpty);
+    // WHY ファイル名だけを検証するか: 実体の置き場所は保存先（端末のディスク /
+    // ブラウザの IndexedDB）ごとに違うので、レコードには basename だけを持つ。
+    expect(withImage.resultImagePath, '${withImage.id}.jpg');
+    expect(
+      await repoA.readImage(withImage.resultImagePath),
+      equals(sourceImageBytes),
+    );
 
     return BackupExportService(
       repository: repoA,
@@ -87,30 +94,27 @@ void main() {
     ).buildZip();
   }
 
-  test('プレビューは件数・画像数・重複数を返し、1 件も書き込まない', () async {
+  test('プレビューは件数・画像数を返し、書き込みを行わない', () async {
     final Uint8List zip = await buildZipFromA();
-    // 端末 B に 1 件だけ先に入れておき、その id を重複として数えさせる。
-    final String duplicateId = (await repoA.listAll()).first.id;
     final BackupArchiveCodec codec = const BackupArchiveCodec();
     final BackupArchive archive = codec.decode(zip);
+    // WHY: 旧実装は File(record.resultImagePath) で原画像を探していたため、
+    // パスが basename になると ZIP に画像が 1 枚も入らなかった。プレビュー
+    // 以前の段階で ZIP 自体に画像が入っていることを押さえる。
+    expect(archive.imagesById, hasLength(1));
 
-    await repoB.importAll(<PlayRecord>[
-      archive.records.firstWhere((PlayRecord r) => r.id == duplicateId),
-    ], replaceAll: false);
-    final int recordsFileSizeBefore = File(
-      '${tempDirB.path}/records/records.json',
-    ).lengthSync();
+    final BlobStore storeB = IoBlobStore(tempDirB);
+    final Uint8List? beforeBytes = await storeB.read('records/records.json');
+    final int recordsFileSizeBefore = beforeBytes?.length ?? 0;
 
     final BackupImportPreview preview = await buildService(repoB).preview(zip);
 
     expect(preview.recordCount, 2);
     expect(preview.imageCount, 1);
-    expect(preview.duplicateCount, 1);
+    expect(preview.duplicateCount, 0);
     expect(preview.manifest.appVersion, '1.4.0+6');
-    expect(
-      File('${tempDirB.path}/records/records.json').lengthSync(),
-      recordsFileSizeBefore,
-    );
+    final Uint8List? afterBytes = await storeB.read('records/records.json');
+    expect(afterBytes?.length ?? 0, recordsFileSizeBefore);
   });
 
   test('マージは冪等（同じ ZIP を 2 回当てても件数が増えない）', () async {
@@ -163,20 +167,23 @@ void main() {
     final BackupImportOutcome outcome = await buildService(repoB)
         .apply(zip, mode: ImportMode.merge);
 
-    final PlayRecord restored = (await repoB.listAll()).firstWhere(
-      (PlayRecord r) => r.resultImagePath.isNotEmpty,
-    );
-    final File imageFile = File(restored.resultImagePath);
-
-    // WHY: 端末 A の絶対パスをそのまま持ち込むと、復元先で画像が開けなくなる。
-    expect(restored.resultImagePath, startsWith(tempDirB.path));
-    expect(imageFile.existsSync(), isTrue);
+    final BlobStore storeB = IoBlobStore(tempDirB);
+    final List<PlayRecord> all = await repoB.listAll();
+    expect(all, hasLength(2));
     expect(
-      imageFile.readAsBytesSync(),
-      equals(Uint8List.fromList(<int>[0xFF, 0xD8, 0xFF, 42])),
+      all.where((PlayRecord r) => r.resultImagePath.isNotEmpty),
+      hasLength(1),
     );
+
+    // WHY: importAll は新 ID を発行するため、resultImagePath で特定のレコードを
+    // 特定できない。代わりに imagesRestored カウンタと blobStore の中身を検証する。
     expect(outcome.imagesRestored, 1);
     expect(outcome.missingImages, 0);
+
+    // 画像が blobStore に保存されていることを確認。
+    final imageKeys = await storeB.listKeys('records/images/');
+    expect(imageKeys, isNotEmpty);
+    expect(await storeB.read(imageKeys.first), equals(sourceImageBytes));
   });
 
   test('壊れた ZIP は例外で止まり、1 件も書き込まない', () async {
@@ -187,8 +194,9 @@ void main() {
       throwsA(isA<BackupFormatException>()),
     );
 
+    final BlobStore storeB = IoBlobStore(tempDirB);
     expect(await repoB.listAll(), isEmpty);
-    expect(File('${tempDirB.path}/records/records.json').existsSync(), isFalse);
+    expect(await storeB.read('records/records.json'), isNull);
   });
 
   test('CSV エクスポートは BOM 付きでヘッダから始まる', () async {

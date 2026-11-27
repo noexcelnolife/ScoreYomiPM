@@ -3,8 +3,10 @@
 // WHY: 復元は「プレビュー → 実行」の 2 段階にして、実行前に件数と重複を提示
 // できるようにする。プレビューは 1 バイトも書き込まない。また、ZIP を最後まで
 // 検証してから書き込みを始めることで、壊れたファイルでの部分復元を防ぐ。
+// 画像は一時ファイルに実体化せず、ZIP から読んだバイト列のまま書き込み側へ
+// 渡す（書き込み可能なファイルシステムが無い Web でも同じ経路を通すため）。
+
 import 'dart:developer' as developer;
-import 'dart:io';
 import 'dart:typed_data';
 
 import '../data/memo_template_repository.dart';
@@ -86,20 +88,14 @@ class BackupImportService {
     required this._writer,
     this._memoTemplateRepository,
     this._codec = const BackupArchiveCodec(),
-    Future<Directory> Function()? temporaryDirectoryFactory,
-  }) : _temporaryDirectoryFactory =
-           temporaryDirectoryFactory ?? _createDefaultTemporaryDirectory;
+  });
 
   final Future<List<PlayRecord>> Function() _listRecords;
   final PlayRecordBulkWriter _writer;
   final BackupArchiveCodec _codec;
-  final Future<Directory> Function() _temporaryDirectoryFactory;
 
   /// メモテンプレートの復元先。null なら復元しない（旧 ZIP・機能未使用時）。
   final MemoTemplateRepository? _memoTemplateRepository;
-
-  static Future<Directory> _createDefaultTemporaryDirectory() =>
-      Directory.systemTemp.createTemp('scoreyomipm_import_');
 
   /// 取り込み内容を調べる（書き込みは行わない）。
   Future<BackupImportPreview> preview(Uint8List zipBytes) async {
@@ -139,34 +135,50 @@ class BackupImportService {
       mode,
     );
 
-    final Directory tempDir = await _temporaryDirectoryFactory();
-    try {
-      final _StagedImages staged = await _stageImages(
-        targets,
-        archive.imagesById,
-        tempDir,
-      );
-      final BulkImportResult result = await _writer.importAll(
-        staged.records,
-        replaceAll: mode == ImportMode.replace,
-      );
-      final int templatesImported = await _restoreTemplates(archive);
+    // WHY(バイト列のまま渡すか): 以前は一時ディレクトリへ実体化してから
+    // 書き込み側にパスを渡していたが、Web には書き込み可能なファイルシステムが
+    // 無い。ZIP から読んだバイト列をそのまま渡せば、保存先が端末でもブラウザ
+    // でも同じ経路で復元できる。
+    final Map<String, Uint8List> imageBytesById = <String, Uint8List>{};
+    int restored = 0;
 
-      return BackupImportOutcome(
-        imported: result.imported,
-        // WHY: サービス側で除外した重複と、書き込み側で検出した重複の両方を
-        // 数える（どちらの経路で落ちた件数も利用者には同じ「スキップ」）。
-        skipped: archive.records.length - targets.length + result.skipped,
-        imagesRestored: staged.restored,
-        missingImages: archive.warnings.length + result.missingImages,
-        templatesImported: templatesImported,
-      );
-    } finally {
-      // WHY: 一時ファイルは復元後に不要。放置すると端末の空き容量を圧迫する。
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
+    final List<PlayRecord> staged = <PlayRecord>[];
+    for (final PlayRecord record in targets) {
+      final String relativePath = record.resultImagePath;
+      if (relativePath.isEmpty) {
+        staged.add(record);
+        continue;
       }
+      final String fileName = _fileNameOf(relativePath);
+      final Uint8List? bytes = archive.imagesById[fileName];
+      if (bytes == null) {
+        staged.add(record.copyWith(resultImagePath: ''));
+        continue;
+      }
+      // WHY(basename を resultImagePath にするか): レコードは画像を保存先から
+      // の相対キーで参照する。ZIP 内の名前がそのままキーになるため、元の
+      // レコードが絶対パスを持っていても basename に寄せる。
+      staged.add(record.copyWith(resultImagePath: fileName));
+      imageBytesById[record.id] = bytes;
+      restored++;
     }
+
+    final BulkImportResult result = await _writer.importAll(
+      staged,
+      replaceAll: mode == ImportMode.replace,
+      imageBytesById: imageBytesById,
+    );
+    final int templatesImported = await _restoreTemplates(archive);
+
+    return BackupImportOutcome(
+      imported: result.imported,
+      // WHY: サービス側で除外した重複と、書き込み側で検出した重複の両方を
+      // 数える（どちらの経路で落ちた件数も利用者には同じ「スキップ」）。
+      skipped: archive.records.length - targets.length + result.skipped,
+      imagesRestored: restored,
+      missingImages: archive.warnings.length + result.missingImages,
+      templatesImported: templatesImported,
+    );
   }
 
   /// ZIP 内のメモテンプレートを取り込み、新しく増えた件数を返す。
@@ -216,56 +228,9 @@ class BackupImportService {
     return unique;
   }
 
-  Future<_StagedImages> _stageImages(
-    List<PlayRecord> records,
-    Map<String, Uint8List> imagesById,
-    Directory tempDir,
-  ) async {
-    final List<PlayRecord> staged = <PlayRecord>[];
-    int restored = 0;
-
-    for (final PlayRecord record in records) {
-      final String relativePath = record.resultImagePath;
-      if (relativePath.isEmpty) {
-        staged.add(record);
-        continue;
-      }
-      final String fileName = _fileNameOf(relativePath);
-      final Uint8List? bytes = imagesById[fileName];
-      if (bytes == null) {
-        staged.add(record.copyWith(resultImagePath: ''));
-        continue;
-      }
-      // WHY: 画像は一時ディレクトリへ実体化してから一括書き込みへ渡す。こうすると
-      // 書き込み側は「実ファイルのコピー」1 経路だけを扱えばよく、ZIP の知識を
-      // データ保存層へ漏らさずに済む。
-      final File target = File(
-        '${tempDir.path}${Platform.pathSeparator}${record.id}${_extensionOf(fileName)}',
-      );
-      await target.writeAsBytes(bytes, flush: true);
-      staged.add(record.copyWith(resultImagePath: target.path));
-      restored++;
-    }
-
-    return _StagedImages(records: staged, restored: restored);
-  }
-
   String _fileNameOf(String path) {
     final String normalized = path.replaceAll(r'\', '/');
     final int slash = normalized.lastIndexOf('/');
     return slash < 0 ? normalized : normalized.substring(slash + 1);
   }
-
-  String _extensionOf(String fileName) {
-    final int dot = fileName.lastIndexOf('.');
-    return dot <= 0 ? '.jpg' : fileName.substring(dot);
-  }
-}
-
-/// 一時ディレクトリへ実体化した後の状態。
-class _StagedImages {
-  const _StagedImages({required this.records, required this.restored});
-
-  final List<PlayRecord> records;
-  final int restored;
 }

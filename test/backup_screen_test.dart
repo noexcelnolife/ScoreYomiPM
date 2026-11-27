@@ -73,6 +73,7 @@ class _FakeWriter implements PlayRecordBulkWriter {
   Future<BulkImportResult> importAll(
     List<PlayRecord> records, {
     required bool replaceAll,
+    Map<String, Uint8List?>? imageBytesById,
   }) async {
     lastReplaceAll = replaceAll;
     return result;

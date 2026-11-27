@@ -3,14 +3,12 @@
 // 検証対象:
 // (a) 値ありレコードの全フィールド表示（難易度・メダルの常設「—」行を含む）
 // (b) null 項目の表示規約（曲名→（曲名未入力）・数値→「—」・判定内訳の個別「—」）
-// (c) 画像ファイル欠損時のフォールバック表示
+// (c) 画像が保存先に無いときのフォールバック表示
 // (d) 修正 → 手入力モード OcrResultScreen（タイトル「スコア修正」・既存値復元）
 // (e) 削除 → 確認ダイアログ（confirm-delete-button は FR-4 と統一）→ 削除で詳細クローズ
 // (f) 再OCR ボタンは未確定のみ表示・失敗時 SnackBar・確定では非表示
 // (g) 自己ベスト判定: 同キー最高スコアのレコードに「自己ベスト」表示（FR-7）
 // (h) 原画像プレビューの InteractiveViewer 拡大縮小（v2 UX #14・一覧は対象外）
-
-import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,6 +24,22 @@ import 'package:scoreyomipm/ui/play_record_detail_screen.dart';
 import 'fake_ocr_engine.dart';
 import 'fake_play_record_repository.dart';
 import 'test_image_helper.dart';
+
+/// テスト用レコードが持つ画像ファイル名。
+///
+/// WHY(パスではなく名前か): resultImagePath は basename だけを持ち、実体は
+/// 保存先（BlobStore）にある。詳細画面は readImage(この名前) で読む。
+const String _imageName = 'result.png';
+
+/// 画像 1 枚入りの保存先を作る。
+///
+/// WHY(ここで画像を入れるか): レコードと画像は別々に保存されるため、
+/// 画像を入れ忘れたテストは「画像が無い」経路を通ってしまう。表示の検証を
+/// したいテストは必ずこれを使い、画像なしの経路は明示的に作る。
+FakePlayRecordRepository _imageRepository() {
+  final Uint8List bytes = createTestImageBytes();
+  return FakePlayRecordRepository()..images[_imageName] = bytes;
+}
 
 /// ルート画面から詳細を push する形式のラッパー。
 ///
@@ -53,7 +67,7 @@ Widget _wrapWithEntry({
 }
 
 /// 値の揃った確定レコード。
-PlayRecord _fullRecord(File image) =>
+PlayRecord _fullRecord() =>
     PlayRecordDraft(
       songName: 'テスト曲',
       score: 98108,
@@ -67,25 +81,24 @@ PlayRecord _fullRecord(File image) =>
       source: PlayRecordSource.playshare,
     ).toPlayRecord(
       id: 'r-1',
-      resultImagePath: image.path,
+      resultImagePath: _imageName,
       playedAt: DateTime(2026, 11, 22, 12, 34),
     );
 
 /// 数値・曲名がすべて未入力の未確定レコード。
-PlayRecord _blankRecord(File image) =>
+PlayRecord _blankRecord() =>
     PlayRecordDraft(
       songName: null,
       status: PlayRecordStatus.pending,
       source: PlayRecordSource.playshare,
     ).toPlayRecord(
       id: 'r-2',
-      resultImagePath: image.path,
+      resultImagePath: _imageName,
       playedAt: DateTime(2026, 11, 22, 9),
     );
 
 /// スコアと日時を指定した確定レコード（FR-7 自己ベスト判定用）。
-PlayRecord _recordWithScore(
-  File image, {
+PlayRecord _recordWithScore({
   required String id,
   required String songName,
   required int score,
@@ -95,7 +108,7 @@ PlayRecord _recordWithScore(
   score: score,
   status: PlayRecordStatus.confirmed,
   source: PlayRecordSource.playshare,
-).toPlayRecord(id: id, resultImagePath: image.path, playedAt: playedAt);
+).toPlayRecord(id: id, resultImagePath: _imageName, playedAt: playedAt);
 
 void main() {
   // WHY(シード辞書のプリロード・01a21152): 曲名入力のライブサジェスト配線により、
@@ -110,11 +123,10 @@ void main() {
   });
 
   testWidgets('値ありレコードの全フィールドを表示する', (WidgetTester tester) async {
-    final File image = createTestImageFile();
     await tester.pumpWidget(
       _wrapWithEntry(
-        repository: FakePlayRecordRepository()
-          ..store['r-1'] = _fullRecord(image),
+        repository: _imageRepository()
+          ..store['r-1'] = _fullRecord(),
         ocrEngine: FakeOcrEngine(),
         recordId: 'r-1',
       ),
@@ -144,11 +156,10 @@ void main() {
   });
 
   testWidgets('null 項目は規約どおりの未入力表示になる', (WidgetTester tester) async {
-    final File image = createTestImageFile();
     await tester.pumpWidget(
       _wrapWithEntry(
-        repository: FakePlayRecordRepository()
-          ..store['r-2'] = _blankRecord(image),
+        repository: _imageRepository()
+          ..store['r-2'] = _blankRecord(),
         ocrEngine: FakeOcrEngine(),
         recordId: 'r-2',
       ),
@@ -164,7 +175,7 @@ void main() {
     expect(find.text('—'), findsNWidgets(6));
   });
 
-  testWidgets('画像ファイル欠損時はフォールバック表示になる', (WidgetTester tester) async {
+  testWidgets('保存先に画像が無いときはフォールバック表示になる', (WidgetTester tester) async {
     final PlayRecord record =
         PlayRecordDraft(
           songName: 'テスト曲',
@@ -177,6 +188,7 @@ void main() {
         );
     await tester.pumpWidget(
       _wrapWithEntry(
+        // WHY 画像を入れないか: このテストだけが「読めなかった」経路を通る。
         repository: FakePlayRecordRepository()..store['r-3'] = record,
         ocrEngine: FakeOcrEngine(),
         recordId: 'r-3',
@@ -185,23 +197,15 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    // WHY: 実ファイルの画像読み込み（欠損パスの読み込みエラー配送）は
-    // FakeAsync 下では進まないため、tester.runAsync で実非同期の完了を待つ。
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 200)),
-    );
-    await tester.pumpAndSettle();
-
     expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
-    expect(find.text('画像ファイルが見つかりません'), findsOneWidget);
+    expect(find.text('画像が見つかりません'), findsOneWidget);
   });
 
   testWidgets('修正ボタンでスコア修正モードへ遷移し既存値が復元される', (WidgetTester tester) async {
-    final File image = createTestImageFile();
     await tester.pumpWidget(
       _wrapWithEntry(
-        repository: FakePlayRecordRepository()
-          ..store['r-1'] = _fullRecord(image),
+        repository: _imageRepository()
+          ..store['r-1'] = _fullRecord(),
         ocrEngine: FakeOcrEngine(),
         recordId: 'r-1',
       ),
@@ -225,9 +229,8 @@ void main() {
   });
 
   testWidgets('削除は確認ダイアログを経由して実行され、詳細が閉じる', (WidgetTester tester) async {
-    final File image = createTestImageFile();
-    final FakePlayRecordRepository repository = FakePlayRecordRepository()
-      ..store['r-1'] = _fullRecord(image);
+    final FakePlayRecordRepository repository = _imageRepository()
+      ..store['r-1'] = _fullRecord();
     await tester.pumpWidget(
       _wrapWithEntry(
         repository: repository,
@@ -271,9 +274,8 @@ void main() {
   testWidgets('再OCR は未確定のみ表示され、失敗時は SnackBar で通知する', (
     WidgetTester tester,
   ) async {
-    final File image = createTestImageFile();
-    final FakePlayRecordRepository repository = FakePlayRecordRepository()
-      ..store['r-2'] = _blankRecord(image);
+    final FakePlayRecordRepository repository = _imageRepository()
+      ..store['r-2'] = _blankRecord();
     await tester.pumpWidget(
       _wrapWithEntry(
         repository: repository,
@@ -303,11 +305,10 @@ void main() {
   });
 
   testWidgets('確定レコードでは再OCR ボタンを表示しない', (WidgetTester tester) async {
-    final File image = createTestImageFile();
     await tester.pumpWidget(
       _wrapWithEntry(
-        repository: FakePlayRecordRepository()
-          ..store['r-1'] = _fullRecord(image),
+        repository: _imageRepository()
+          ..store['r-1'] = _fullRecord(),
         ocrEngine: FakeOcrEngine(),
         recordId: 'r-1',
       ),
@@ -322,17 +323,14 @@ void main() {
   });
 
   testWidgets('同キー最高スコアのレコードは「自己ベスト」を表示する（FR-7）', (WidgetTester tester) async {
-    final File image = createTestImageFile();
-    final FakePlayRecordRepository repository = FakePlayRecordRepository()
+    final FakePlayRecordRepository repository = _imageRepository()
       ..store['r-1'] = _recordWithScore(
-        image,
         id: 'r-1',
         songName: 'テスト曲',
         score: 98108,
         playedAt: DateTime(2026, 11, 20, 10),
       )
       ..store['r-2'] = _recordWithScore(
-        image,
         id: 'r-2',
         songName: 'テスト曲',
         score: 99000,
@@ -354,17 +352,14 @@ void main() {
   testWidgets('同キーで最高スコアでないレコードは「自己ベスト」を表示しない（FR-7）', (
     WidgetTester tester,
   ) async {
-    final File image = createTestImageFile();
-    final FakePlayRecordRepository repository = FakePlayRecordRepository()
+    final FakePlayRecordRepository repository = _imageRepository()
       ..store['r-1'] = _recordWithScore(
-        image,
         id: 'r-1',
         songName: 'テスト曲',
         score: 98108,
         playedAt: DateTime(2026, 11, 20, 10),
       )
       ..store['r-2'] = _recordWithScore(
-        image,
         id: 'r-2',
         songName: 'テスト曲',
         score: 99000,
@@ -383,7 +378,7 @@ void main() {
     expect(find.text('自己ベスト'), findsNothing);
   });
 
-  group('再 OCR 経路の matchedSong 渡し（smoke test 修正①）', () {
+  group('再 OCR 経路の matchedSong 渡し（ビルド検証テスト 修正①）', () {
     // WHY: 一次 OCR（home_screen）は pipeline.run() の context から
     // matchedSong を結果画面へ渡すが、再 OCR 経路（_rerunOcr）だけ
     // 渡していなかった → VR-1/VR-3 が再 OCR 確認画面で常に skip になる
@@ -396,11 +391,10 @@ void main() {
     // 意図的に発火させ、4 判定行のメッセージを確認する。
 
     testWidgets('再 OCR の結果画面でも VR-1 が発火する', (WidgetTester tester) async {
-      final File image = createTestImageFile();
-      await tester.pumpWidget(
+        await tester.pumpWidget(
         _wrapWithEntry(
-          repository: FakePlayRecordRepository()
-            ..store['r-2'] = _judgmentPendingRecord(image),
+          repository: _imageRepository()
+            ..store['r-2'] = _judgmentPendingRecord(),
           ocrEngine: FakeOcrEngine(
             onRecognize: (_) async => _judgmentFullPageResult(),
             onRecognizeRegion: (
@@ -444,11 +438,10 @@ void main() {
     testWidgets('原画像プレビューが InteractiveViewer で拡縮でき、表示枠の高さは不変', (
       WidgetTester tester,
     ) async {
-      final File image = createTestImageFile();
-      await tester.pumpWidget(
+        await tester.pumpWidget(
         _wrapWithEntry(
-          repository: FakePlayRecordRepository()
-            ..store['r-1'] = _fullRecord(image),
+          repository: _imageRepository()
+            ..store['r-1'] = _fullRecord(),
           ocrEngine: FakeOcrEngine(),
           recordId: 'r-1',
         ),
@@ -526,7 +519,7 @@ OcrPageResult _judgmentFullPageResult() {
 /// 上書きするため、抽出値と同一の判定値を持つレコードを用意する。これで
 /// 結果画面の判定 4 項目が値を持ち、VR-1 の発火条件（判定 4 値 +
 /// totalNotes）が揃う。判定合計 1235 > seed harmonia totalNotes 1036。
-PlayRecord _judgmentPendingRecord(File image) {
+PlayRecord _judgmentPendingRecord() {
   return PlayRecord(
     id: 'r-2',
     playedAt: DateTime(2026, 11, 22, 12),
@@ -540,7 +533,7 @@ PlayRecord _judgmentPendingRecord(File image) {
     level: null,
     status: PlayRecordStatus.pending,
     source: PlayRecordSource.playshare,
-    resultImagePath: image.path,
+    resultImagePath: _imageName,
   );
 }
 

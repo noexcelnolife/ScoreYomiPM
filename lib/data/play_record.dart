@@ -272,7 +272,7 @@ class PlayRecord {
       source:
           PlayRecordSource.values.asNameMap()[json['source']] ??
           PlayRecordSource.playshare,
-      resultImagePath: json['resultImagePath'] as String? ?? '',
+      resultImagePath: _migrateResultImagePath(json['resultImagePath'] as String? ?? ''),
     );
   }
 
@@ -280,6 +280,19 @@ class PlayRecord {
 
   static int? _readInt(Object? value) {
     return value is int ? value : null;
+  }
+
+  /// 保存済みの resultImagePath を移行読み込みする。
+  ///
+  /// 絶対パス（`/data/user/0/.../r123.jpg` や `C:\...\r123.jpg` 等）が残っている
+  /// 旧レコードから basename キー（`r123.jpg`）を取り出す。Web では絶対パスは
+  /// 意味を持たないため、basename キーに正規化して BlobStore で引けるようにする。
+  /// 空文字・ basename のままの場合はそのまま返す。
+  static String _migrateResultImagePath(String path) {
+    if (path.isEmpty) return path;
+    final normalized = path.replaceAll(r'\', '/');
+    final int slash = normalized.lastIndexOf('/');
+    return slash < 0 ? normalized : normalized.substring(slash + 1);
   }
 }
 

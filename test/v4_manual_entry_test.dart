@@ -7,13 +7,14 @@
 // (4) 一覧: 空画像パスのレコード行はプレースホルダアイコン表示（§2.5）
 // (5) 詳細: 空画像パスのレコードで原画像プレビューが非表示（§2.5）
 
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:scoreyomipm/data/play_record.dart';
 import 'package:scoreyomipm/data/play_record_repository.dart';
+import 'package:scoreyomipm/platform/blob_store.dart';
 import 'package:scoreyomipm/ui/ocr_result_screen.dart';
 import 'package:scoreyomipm/ui/play_record_detail_screen.dart';
 import 'package:scoreyomipm/ui/play_records_screen.dart';
@@ -40,40 +41,28 @@ PlayRecordDraft _draft({String songName = '曲X', String score = '123456'}) {
 
 void main() {
   group('(1) repository.create の画像省略', () {
-    late Directory tempDir;
     late FilePlayRecordRepository repository;
 
-    setUp(() async {
-      tempDir = await Directory.systemTemp.createTemp('v4_manual_entry');
-      repository = FilePlayRecordRepository(
-        documentsDirectoryResolver: () async => tempDir,
-      );
-    });
-
-    tearDown(() async {
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
-      }
+    setUp(() {
+      repository = FilePlayRecordRepository(blobStore: MemoryBlobStore());
     });
 
     test('画像 null で resultImagePath が空文字のレコードを作成する', () async {
       final PlayRecord record = await repository.create(_draft(), null);
 
       expect(record.resultImagePath, '');
-      expect(await File(record.resultImagePath).exists(), isFalse);
       // JSONL への追記も崩れない（再読込で回収できる）。
       final List<PlayRecord> all = await repository.listAll();
       expect(all.map((PlayRecord record) => record.id), contains(record.id));
     });
 
-    test('画像あり従来経路は従来どおりファイルをコピーする', () async {
-      final File sourceImage = File('${tempDir.path}/source.png')
-        ..writeAsBytesSync(<int>[1, 2, 3]);
+    test('画像あり経路は従来どおりレコードを作成する', () async {
+      final Uint8List sourceImage = Uint8List.fromList(<int>[1, 2, 3]);
 
       final PlayRecord record = await repository.create(_draft(), sourceImage);
 
       expect(record.resultImagePath, isNot(''));
-      expect(await File(record.resultImagePath).exists(), isTrue);
+      expect(await repository.readImage(record.resultImagePath), sourceImage);
     });
   });
 

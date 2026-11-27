@@ -22,11 +22,10 @@
 // クト比で決まるため、横長（1.5）と 4:3（1.333）のテスト画像 × 2 種別行の
 // 4 組合わせで不一致 SnackBar の出現/非出現を固定すれば、渡された hint 値が
 // hcV1 / acV1 のどちらであるかを完全に確定できる。
-import 'dart:io';
-
 // WHY: debugDefaultTargetPlatformOverride は foundation にあるが material_ui
 // からは再エクスポートされないため個別 import（Windows 非表示テスト用）。
 import 'package:flutter/foundation.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -148,14 +147,24 @@ class _StubSharingIntentReceiver extends SharingIntentReceiver {
 /// WHY: 不一致フラグの観測には「ST-1 分類が arcadeResultFrame になる画像」が
 /// 必要（横長でアスペクト <1.45 → arcadeResultFrame・docs の実測分類規則）。
 /// プレーシェア代表の 3x2（1.5）と対にして hint 値の真偽表を完成させる。
-File _createArcadeLikeTestImageFile() {
+Uint8List _arcadeLikePngBytes() {
   final img.Image image = img.Image(width: 4, height: 3);
   img.fill(image, color: img.ColorRgba8(255, 255, 255, 255));
-  final File file = File(
-    '${Directory.systemTemp.path}${Platform.pathSeparator}'
-    'scoreyomipm-test-arcade-${DateTime.now().microsecondsSinceEpoch}.png',
-  )..writeAsBytesSync(img.encodePng(image));
-  return file;
+  return Uint8List.fromList(img.encodePng(image));
+}
+
+/// 4:3 画像を選択結果として渡すための XFile。
+///
+/// WHY(毎回書き出すか): パイプラインは実ファイルを読むため、バイト列だけでは
+/// 流せない。各テストが自分専用のファイルを持つことで、後片付けの順序に
+/// 依存しない。
+XFile _arcadeLikeXFile() {
+  return XFile(
+    createTempImageFileFromBytes(
+      _arcadeLikePngBytes(),
+      'scoreyomipm-arcade-${DateTime.now().microsecondsSinceEpoch}.png',
+    ).path,
+  );
 }
 
 /// HomeScreen を種別シート検証用に構築する。
@@ -285,7 +294,7 @@ void main() {
   testWidgets('プレーシェア行 + 4:3 画像 → 不一致 SnackBar が表示される', (
     WidgetTester tester,
   ) async {
-    await _pumpHome(tester, XFile(_createArcadeLikeTestImageFile().path));
+    await _pumpHome(tester, _arcadeLikeXFile());
 
     await _importViaSheet(tester, rowText: 'HC プレーシェア');
     await _waitForOcrResultScreen(tester);
@@ -317,7 +326,7 @@ void main() {
   testWidgets('リザルト写真ギャラリー行 + 4:3 画像 → 一致のため不一致 SnackBar 無し', (
     WidgetTester tester,
   ) async {
-    await _pumpHome(tester, XFile(_createArcadeLikeTestImageFile().path));
+    await _pumpHome(tester, _arcadeLikeXFile());
 
     await _importViaSheet(
       tester,
@@ -344,11 +353,9 @@ void main() {
     // WHY: 4:3 画像は ST-1 分類で arcadeResultFrame になり hint=acV1 と一致。
     // 不一致 SnackBar が無いことで「acV1 が渡った」ことを観測できる（冒頭の
     // 観測方針コメント参照）。
-    final File image = _createArcadeLikeTestImageFile();
-    final _CameraProbeImagePicker picker = _CameraProbeImagePicker(
-      XFile(image.path),
-    );
-    await _pumpHome(tester, XFile(image.path), imagePicker: picker);
+    final XFile arcadeImage = _arcadeLikeXFile();
+    final _CameraProbeImagePicker picker = _CameraProbeImagePicker(arcadeImage);
+    await _pumpHome(tester, arcadeImage, imagePicker: picker);
 
     await _importViaSheet(
       tester,
@@ -436,14 +443,14 @@ void main() {
   testWidgets('未注入（本番相当）でもファクトリ生成ピッカーでギャラリー pick が走る', (
     WidgetTester tester,
   ) async {
-    final File image = createTestImageFile();
-    final _CameraProbeImagePicker picker = _CameraProbeImagePicker(
-      XFile(image.path),
-    );
+    // WHY: 保存経路が原画像を読むため、実在するファイルを渡す（ダミーの
+    // パスだと読み込みで失敗し、ピッカーが呼ばれたこと以外を観測できない）。
+    final XFile picked = XFile(createTestImageFile().path);
+    final _CameraProbeImagePicker picker = _CameraProbeImagePicker(picked);
     // WHY: imagePicker を渡さないことで main.dart と同じ未注入状態を作る。
     await _pumpHome(
       tester,
-      XFile(image.path),
+      picked,
       imagePickerFactory: () => picker,
     );
 
@@ -460,13 +467,11 @@ void main() {
   ) async {
     // WHY: 4:3 画像 × hint=acV1 は分類と一致するため不一致 SnackBar 無し
     // （acV1 が渡ったことの観測。冒頭の観測方針コメント参照）。
-    final File image = _createArcadeLikeTestImageFile();
-    final _CameraProbeImagePicker picker = _CameraProbeImagePicker(
-      XFile(image.path),
-    );
+    final XFile arcadeImage = _arcadeLikeXFile();
+    final _CameraProbeImagePicker picker = _CameraProbeImagePicker(arcadeImage);
     await _pumpHome(
       tester,
-      XFile(image.path),
+      arcadeImage,
       imagePickerFactory: () => picker,
     );
 
@@ -563,9 +568,9 @@ void main() {
   testWidgets('共有インテント経由は hint なしで OCR が走る（不一致 SnackBar 無し）', (
     WidgetTester tester,
   ) async {
-    final File image = createTestImageFile();
+    createTestImageFile();
     final _StubSharingIntentReceiver receiver = _StubSharingIntentReceiver(
-      initialPath: image.path,
+      initialPath: createTestImageFile().path,
     );
 
     await tester.pumpWidget(

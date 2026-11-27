@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:material_ui/material_ui.dart';
 
 import '../data/memo_template_repository.dart';
@@ -10,6 +8,7 @@ import '../ocr/ocr_engine.dart';
 import '../ocr/song_repository.dart';
 import 'difficulty_color.dart';
 import 'play_record_detail_screen.dart';
+import 'record_image.dart';
 
 /// FR-10: 記録一覧画面（確定・未確定の全レコード対象）。
 ///
@@ -536,11 +535,11 @@ class _PlayRecordsScreenState extends State<PlayRecordsScreen> {
         // 表示する。
         child: record.resultImagePath.isEmpty
             ? const Icon(Icons.image_not_supported_outlined)
-            : Image.file(
-                File(record.resultImagePath),
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) =>
-                    const Icon(Icons.broken_image_outlined),
+            // WHY(RecordImage か): 画像の実体は保存先（ディスク / IndexedDB）
+            // にあり、UI が File を開くと Web で落ちる。
+            : RecordImage(
+                repository: widget.playRecordRepository,
+                imageName: record.resultImagePath,
               ),
       ),
       title: Row(

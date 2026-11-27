@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:material_ui/material_ui.dart';
 
@@ -72,7 +72,8 @@ const Map<String, String> _fieldRowLabels = <String, String>{
 class OcrResultScreen extends StatefulWidget {
   const OcrResultScreen({
     super.key,
-    this.imageFile,
+    this.imageBytes,
+    this.loadImageBytes,
     this.pageResult,
     this.extractionResult,
     this.playRecordRepository,
@@ -87,11 +88,41 @@ class OcrResultScreen extends StatefulWidget {
     this.memoTemplateRepository,
   });
 
-  /// OCR にかけた元画像（確認用プレビュー表示に使用する）。
+  /// OCR にかけた元画像バイト列（確認用プレビュー表示に使用する）。
   ///
   /// WHY(v4 案2): 写真なし手入力モードでは null。プレビュー領域自体を出さず、
   /// repository.create へも null を渡して「画像なし」レコードを作る。
-  final File? imageFile;
+  final Uint8List? imageBytes;
+
+  /// 原画像バイト列を必要になった時点で読む関数。[imageBytes] があれば不要。
+  ///
+  /// WHY(遅延読み込みか): ピッカーや共有インテントが渡してくるのは実ファイルで、
+  /// その読み込みは実 I/O になる。遷移の直前に await すると、画面が出るまでの
+  /// 時間がディスク待ちに引きずられる（テストでは FakeAsync の下で完了せず、
+  /// 遷移そのものが起きない）。画面を出してから読めばよい。
+  ///
+  /// WHY(コールバックか): 読み出し口は端末のファイルにもブラウザの保存先にも
+  /// なり得る。UI が `dart:io` を知らずに済むよう、呼び出し側が閉じ込める。
+  final Future<Uint8List> Function()? loadImageBytes;
+
+  /// 原画像バイト列を解決する。どちらも未指定なら null（写真なし手入力）。
+  Future<Uint8List?> resolveImageBytes() async {
+    final Uint8List? given = imageBytes;
+    if (given != null) {
+      return given;
+    }
+    final Future<Uint8List> Function()? loader = loadImageBytes;
+    if (loader == null) {
+      return null;
+    }
+    try {
+      return await loader();
+    } catch (_) {
+      // WHY(握りつぶすか): 原画像が消えていても記録は保存できるべき。表示は
+      // プレースホルダに落とし、保存は「画像なし」として続行する。
+      return null;
+    }
+  }
 
   /// 表示対象の OCR 結果。
   ///
@@ -170,9 +201,10 @@ class OcrResultScreen extends StatefulWidget {
 
   /// この画面への [MaterialPageRoute] を生成する。
   ///
-  /// WHY(v4 案2): 写真なし手入力では [imageFile] を省略する。
+  /// WHY(v4 案2): 写真なし手入力では [imageBytes] も [loadImageBytes] も省略する。
   static Route<void> route({
-    File? imageFile,
+    Uint8List? imageBytes,
+    Future<Uint8List> Function()? loadImageBytes,
     OcrPageResult? pageResult,
     FieldExtractionResult? extractionResult,
     PlayRecordRepository? playRecordRepository,
@@ -188,7 +220,8 @@ class OcrResultScreen extends StatefulWidget {
   }) {
     return MaterialPageRoute<void>(
       builder: (_) => OcrResultScreen(
-        imageFile: imageFile,
+        imageBytes: imageBytes,
+        loadImageBytes: loadImageBytes,
         pageResult: pageResult,
         extractionResult: extractionResult,
         playRecordRepository: playRecordRepository,
@@ -711,7 +744,7 @@ class _OcrResultScreenState extends State<OcrResultScreen> {
       appBar: AppBar(title: Text(widget.appBarTitle ?? 'スコア手入力')),
       body: ListView(
         children: <Widget>[
-          _ImagePreview(imageFile: widget.imageFile),
+          _ImagePreview(imageBytes: widget.imageBytes, loadImageBytes: widget.loadImageBytes),
           _FieldSection(
             extractionResult: widget.extractionResult,
             controllers: _controllers,
@@ -764,7 +797,7 @@ class _OcrResultScreenState extends State<OcrResultScreen> {
           ? ListView(
               padding: const EdgeInsets.symmetric(vertical: 8),
               children: <Widget>[
-                _ImagePreview(imageFile: widget.imageFile),
+                _ImagePreview(imageBytes: widget.imageBytes, loadImageBytes: widget.loadImageBytes),
                 _EmptyResult(),
               ],
             )
@@ -809,7 +842,7 @@ class _OcrResultScreenState extends State<OcrResultScreen> {
     required List<ValidationIssue> validationIssues,
   }) {
     if (index == 0) {
-      return _ImagePreview(imageFile: widget.imageFile);
+      return _ImagePreview(imageBytes: widget.imageBytes, loadImageBytes: widget.loadImageBytes);
     }
     if (showFieldSection && index == 1) {
       final Widget fieldSection = _FieldSection(
@@ -885,7 +918,9 @@ class _OcrResultScreenState extends State<OcrResultScreen> {
     try {
       final String? existingId = widget.existingRecordId;
       if (existingId == null) {
-        await repository.create(draft, widget.imageFile);
+        // WHY ここで解決するか: 原画像の読み込みは保存の直前に 1 回だけでよい。
+        // 画面表示の時点で待つと遷移が遅れる（プレビューは別途遅延読み込みする）。
+        await repository.create(draft, await widget.resolveImageBytes());
       } else {
         await repository.update(existingId, draft);
       }
@@ -1814,45 +1849,76 @@ class _ResultSummaryHeader extends StatelessWidget {
 }
 
 /// OCR にかけた元画像のプレビュー。
-class _ImagePreview extends StatelessWidget {
-  const _ImagePreview({required this.imageFile});
+class _ImagePreview extends StatefulWidget {
+  const _ImagePreview({this.imageBytes, this.loadImageBytes});
 
   /// 原画像。写真なし手入力モードでは null（v4 案2）。
-  final File? imageFile;
+  final Uint8List? imageBytes;
+
+  /// 遅延読み込み。null ならプレビューを出さない。
+  final Future<Uint8List> Function()? loadImageBytes;
+
+  @override
+  State<_ImagePreview> createState() => _ImagePreviewState();
+}
+
+class _ImagePreviewState extends State<_ImagePreview> {
+  late final Future<Uint8List?> _future = widget.imageBytes == null
+      ? _resolve()
+      : Future<Uint8List?>.value(widget.imageBytes);
+
+  Future<Uint8List?> _resolve() async {
+    final Uint8List? given = widget.imageBytes;
+    if (given != null) {
+      return given;
+    }
+    final Future<Uint8List> Function()? loader = widget.loadImageBytes;
+    if (loader == null) {
+      return null;
+    }
+    try {
+      return await loader();
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final File? image = imageFile;
-    if (image == null) {
-      // WHY(v4 案2): 原画像が存在しないためプレビュー領域自体を出さない。
-      return const SizedBox.shrink();
+    // WHY(同期に描く分岐を持つか): バイト列が既にあるなら待つ理由が無い。
+    // FutureBuilder を経由すると 1 フレーム遅れて画像が出ず、スクロール位置や
+    // 表示順の検証が「まだ描かれていない」状態を見てしまう。
+    final Uint8List? given = widget.imageBytes;
+    if (given != null) {
+      return _buildPreview(given);
     }
+    return FutureBuilder<Uint8List?>(
+      future: _future,
+      builder: (BuildContext context, AsyncSnapshot<Uint8List?> snapshot) {
+        final Uint8List? loaded = snapshot.data;
+        // 読み込み中と「そもそも画像が無い」はどちらも枠を出さない。
+        if (loaded == null) {
+          return const SizedBox.shrink();
+        }
+        return _buildPreview(loaded);
+      },
+    );
+  }
+
+  Widget _buildPreview(Uint8List imageData) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      // WHY Card ではなく ClipRRect(8) か（2026-11-26 のユーザー指示
-      // 「記録詳細画面のイメージです」）: 同じ記録の画像を確認画面と詳細画面で
-      // 見比べるため、角丸半径（8）・高さ（240）・拡大縮小の条件を記録詳細画面
-      // （play_record_detail_screen.dart の _imagePreview）と揃える。
-      // 記録詳細側も高さ 240・ClipRRect(8)・InteractiveViewer(1.0〜3.0) で、
-      // 差は原画像の有無だけになる。
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: SizedBox(
           height: 240,
           width: double.infinity,
-          // WHY(v2 UX 改修2): プレーシェア画像の細部（判定文字・レベル表記）を
-          // 確認できるよう、枠内で拡大縮小・パンできる InteractiveViewer で包む。
-          // minScale 1.0 = 原寸より縮小しない（縮小は視認性を下げるだけ）。
-          // maxScale 3.0 = 判定文字の判読に足る倍率。表示枠（高さ 240）は
-          // 変えず、枠内トランスフォーム（既定の hardEdge クリップ）に留める。
           child: InteractiveViewer(
             minScale: 1.0,
             maxScale: 3.0,
-            child: Image.file(
-              image,
+            child: Image.memory(
+              imageData,
               fit: BoxFit.contain,
-              // WHY: 画像が読めない環境（テスト・ファイル移動後など）でも
-              // 画面が壊れないようにする（PoC の防御表示）。
               errorBuilder: (_, _, _) =>
                   const Center(child: Icon(Icons.broken_image_outlined)),
             ),

@@ -1,6 +1,6 @@
-# tool/web_smoke.ps1
+# tool/web_build_check.ps1
 #
-# Web スモークテストスクリプト
+# Web ビルド検証テストスクリプト
 #
 # 目的:
 #   flutter build web --release が成功してもブラウザで白画面になる
@@ -14,9 +14,15 @@
 #   4. HTTP 200 が返るまで待機（最大30秒）
 #   5. try/finally でサーバプロセスを必ず停止
 #
+# このスクリプトが保証しないこと（重要）:
+#   HTTP 200 は「index.html が配信できた」だけであり、アプリが描画できた証拠では
+#   ない。ブラウザの console にエラーが出ていないこととホーム画面が描画される
+#   ことは、人間または AI がブラウザで目視確認する。ここを自動化したつもりに
+#   ならないよう、結果表示にもその旨を出す。
+#
 # 使い方:
-#   pwsh -File tool\web_smoke.ps1 -Port 8123
-#   pwsh -File tool\web_smoke.ps1 -Port 8123 -SkipBuild
+#   pwsh -File tool\web_build_check.ps1 -Port 8123
+#   pwsh -File tool\web_build_check.ps1 -Port 8123 -SkipBuild
 #
 # 制約:
 #   - lib/ は変更しない
@@ -34,6 +40,21 @@ $ErrorActionPreference = "Continue"
 # Flutter は PATH に入っていないため絶対パスで指定（AGENTS.md の前提）
 $flutterExe = "C:\dev\flutter\bin\flutter.bat"
 
+# 静的配信は python -m http.server を使う。PATH に無い環境（py ランチャーのみ）
+# でも動くように、使える方を選ぶ。どちらも無ければ配信ステップだけ諦める。
+$pythonExe = $null
+$pythonArgs = @()
+foreach ($candidate in @(
+    @{ Exe = "python"; Prefix = @() },
+    @{ Exe = "py"; Prefix = @("-3") }
+)) {
+    if (Get-Command $candidate.Exe -ErrorAction SilentlyContinue) {
+        $pythonExe = $candidate.Exe
+        $pythonArgs = $candidate.Prefix
+        break
+    }
+}
+
 # スクリプト配置ディレクトリの親（worktree ルート）を作業ディレクトリとする
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $worktreeRoot = Split-Path -Parent $scriptDir
@@ -41,7 +62,7 @@ $buildWebDir = Join-Path $worktreeRoot "build\web"
 
 Set-Location $worktreeRoot
 
-Write-Host "=== Web スモークテスト開始 ==="
+Write-Host "=== Web ビルド検証テスト開始 ==="
 Write-Host "作業ディレクトリ: $worktreeRoot"
 Write-Host "ポート: $Port"
 Write-Host ""
@@ -91,7 +112,11 @@ $serverProcess = $null
 $httpCheckResult = $null
 
 try {
-    if (-not (Test-Path $buildWebDir)) {
+    if ($pythonExe -eq $null) {
+        Write-Host "エラー: python も py も見つかりません。配信ステップをスキップします。"
+        $httpCheckResult = "no_python"
+    }
+    elseif (-not (Test-Path $buildWebDir)) {
         Write-Host "エラー: $buildWebDir が存在しません。ビルドを実行してください。"
         $httpCheckResult = "build_dir_missing"
     }
@@ -102,7 +127,7 @@ try {
 
         # python -m http.server をバックグラウンドで起動
         # WindowStyle Hidden でコンソールウィンドウを出さない
-        $serverProcess = Start-Process -FilePath "python" -ArgumentList "-m", "http.server", $Port, "--directory", $buildWebDir -PassThru -WindowStyle Hidden
+        $serverProcess = Start-Process -FilePath $pythonExe -ArgumentList (@($pythonArgs) + @("-m", "http.server", $Port, "--directory", $buildWebDir)) -PassThru -WindowStyle Hidden
 
         $url = "http://localhost:$Port/"
         $maxWaitSeconds = 30
@@ -135,7 +160,7 @@ try {
     }
 
     Write-Host ""
-    Write-Host "=== Web スモークテスト結果 ==="
+    Write-Host "=== Web ビルド検証テスト結果 ==="
     Write-Host "flutter analyze: 終了コード $($results["analyze"])"
     Write-Host "flutter test:    終了コード $($results["test"])"
     Write-Host "flutter build:   終了コード $($results["build"])"
@@ -145,22 +170,28 @@ try {
     elseif ($httpCheckResult -eq "build_dir_missing") {
         Write-Host "HTTP 確認:        スキップ (build\web 不在)"
     }
+    elseif ($httpCheckResult -eq "no_python") {
+        Write-Host "HTTP 確認:        スキップ (python 不在)"
+    }
     else {
         Write-Host "HTTP 確認:        失敗 (タイムアウト)"
     }
+    Write-Host ""
+    Write-Host "注意: HTTP 200 は配信できたことだけを示す。描画と console エラー 0 件は"
+    Write-Host "      ブラウザで目視確認すること（このスクリプトは保証しない）。"
 
     # 全ステップ成功かつ HTTP 200 なら成功
     $allOk = ($results["analyze"] -eq 0) -and ($results["test"] -eq 0) -and ($results["build"] -eq 0) -and ($httpCheckResult -eq "ok")
 
     if ($allOk) {
         Write-Host ""
-        Write-Host "=== Web スモークテスト: すべて成功 ==="
+        Write-Host "=== Web ビルド検証テスト: すべて成功 ==="
         Write-Host "ブラウザで http://localhost:$Port/ にアクセスして動作を確認してください。"
         exit 0
     }
     else {
         Write-Host ""
-        Write-Host "=== Web スモークテスト: 一部失敗 ==="
+        Write-Host "=== Web ビルド検証テスト: 一部失敗 ==="
         exit 1
     }
 }

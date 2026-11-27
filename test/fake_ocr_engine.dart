@@ -18,7 +18,7 @@ class FakeOcrEngine implements OcrEngine {
 
   /// recognizeRegion の実装。null の場合は呼ばれた時点でテスト失敗扱い。
   ///
-  /// WHY: 再 OCR 経路の matchedSong 渡しテスト（smoke test 修正①）で
+  /// WHY: 再 OCR 経路の matchedSong 渡しテスト（ビルド検証テスト 修正①）で
   /// songTitle 帯の領域 OCR 応答が必要になった（パイプラインの曲照合は
   /// 領域 OCR の曲名帯結果を入力とするため、region 応答を返せないと
   /// matchedSong まで辿れない）。

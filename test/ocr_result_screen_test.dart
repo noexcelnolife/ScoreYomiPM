@@ -11,7 +11,7 @@
 // (h) 未抽出かつ未入力の欄の黄色強調とライブ解除（v2 UX 改修3）
 // (i) 手入力候補選択の DB 総ノーツリンク（v2 UX #15）
 
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -177,7 +177,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: _extraction(),
         ),
@@ -212,7 +212,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: _extractionWithoutLevel(),
         ),
@@ -240,7 +240,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: _extraction(),
         ),
@@ -272,7 +272,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: _extraction(),
         ),
@@ -296,7 +296,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: _extraction(),
         ),
@@ -320,7 +320,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           // エラー時: extractionResult なし → フィールドセクションを出さない。
           extractionResult: null,
@@ -348,7 +348,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: _extraction(),
           playRecordRepository: repository,
@@ -376,7 +376,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: _extraction(),
           playRecordRepository: repository,
@@ -413,7 +413,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: _extraction(),
           playRecordRepository: repository,
@@ -456,7 +456,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           playRecordRepository: repository,
@@ -488,7 +488,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: _extraction(),
           songMatchResult: SongMatchResult(
@@ -519,7 +519,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: _extraction(),
           playRecordRepository: repository,
@@ -552,7 +552,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           playRecordRepository: repository,
@@ -571,7 +571,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: _extraction(),
         ),
@@ -607,7 +607,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: _emptyPageResult(),
             extractionResult: FieldExtractionResult(
               numericFields: const <NumericFieldKind, ExtractedField>{},
@@ -711,7 +711,7 @@ void main() {
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (BuildContext routeContext) => OcrResultScreen(
-                      imageFile: File('dummy.png'),
+                      imageBytes: Uint8List.fromList(<int>[]),
                       pageResult: null,
                       extractionResult: null,
                       existingRecordId: 'rec-edit',
@@ -807,7 +807,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: null,
           songMatchResult: _undecidedMatch,
@@ -827,7 +827,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: _extraction(),
           songMatchResult: _undecidedMatch,
@@ -895,7 +895,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: _extraction(),
           songMatchResult: autoDecidedMatch,
@@ -930,7 +930,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: _extraction(),
           songMatchResult: emptyCandidatesMatch,
@@ -959,7 +959,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: _extraction(),
           playRecordRepository: repository,
@@ -1053,7 +1053,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: inconsistentExtraction(),
         ),
@@ -1076,7 +1076,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: consistentExtraction(),
         ),
@@ -1091,7 +1091,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: inconsistentExtraction(),
         ),
@@ -1112,7 +1112,7 @@ void main() {
 
   testWidgets('手入力モードでは検証メッセージを出さない', (WidgetTester tester) async {
     await tester.pumpWidget(
-      _wrap(OcrResultScreen(imageFile: File('dummy.png'), pageResult: null)),
+      _wrap(OcrResultScreen(imageBytes: Uint8List.fromList(<int>[]), pageResult: null)),
     );
     await tester.pumpAndSettle();
 
@@ -1137,7 +1137,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: _pageResult(),
             extractionResult: inconsistentExtraction(),
             matchedSong: song,
@@ -1155,7 +1155,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: _pageResult(),
             extractionResult: inconsistentExtraction(),
           ),
@@ -1167,7 +1167,7 @@ void main() {
     });
   });
 
-  group('0 要素時の通知表示（smoke test 修正②）', () {
+  group('0 要素時の通知表示（ビルド検証テスト 修正②）', () {
     // WHY: 読めない画像（0 要素）でもフィールドセクションに着地するため
     // 「読めなかった」ことが伝わらず、FR-3 手入力を自力で発見する必要が
     // あった。0 要素着地時のみ通知 1 行を出し、通常結果・手動モードでは
@@ -1179,7 +1179,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: _emptyPageResult(),
             extractionResult: FieldExtractionResult(
               numericFields: <NumericFieldKind, ExtractedField>{},
@@ -1197,7 +1197,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: _pageResult(),
             extractionResult: _extraction(),
           ),
@@ -1212,7 +1212,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(
-        _wrap(OcrResultScreen(imageFile: File('dummy.png'))),
+        _wrap(OcrResultScreen(imageBytes: Uint8List.fromList(<int>[]))),
       );
       await tester.pumpAndSettle();
 
@@ -1220,7 +1220,7 @@ void main() {
     });
   });
 
-  group('再 OCR 経路の抽出値優先（smoke test 修正フォローアップ）', () {
+  group('再 OCR 経路の抽出値優先（ビルド検証テスト 修正フォローアップ）', () {
     // WHY: 再 OCR 経路（extractionResult 非 null + existingRecordId 非 null）
     // では既存レコード復元（FR-4 _applyRestoredRecord）が抽出値を復元値
     // （null → 空文字）で上書きし、空フォームに着地していた（リード裁定:
@@ -1246,7 +1246,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: _pageResult(),
             extractionResult: _extraction(),
             playRecordRepository: repository,
@@ -1285,7 +1285,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: _pageResult(),
             extractionResult: _extraction(),
             playRecordRepository: repository,
@@ -1320,7 +1320,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: _pageResult(),
             extractionResult: _extractionWithoutLevel(),
           ),
@@ -1350,7 +1350,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: _pageResult(),
             extractionResult: _extractionWithoutLevel(),
           ),
@@ -1392,7 +1392,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: _emptyPageResult(),
             extractionResult: FieldExtractionResult(
               numericFields: const <NumericFieldKind, ExtractedField>{},
@@ -1450,7 +1450,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: null,
             extractionResult: null,
             existingRecordId: 'rec-yellow',
@@ -1485,7 +1485,7 @@ void main() {
       await pumpWide(
         tester,
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: _extraction(),
         ),
@@ -1520,7 +1520,7 @@ void main() {
       await pumpWide(
         tester,
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
         ),
@@ -1564,7 +1564,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: null,
             extractionResult: null,
             onSongTitleSearch: onSearch,
@@ -1599,7 +1599,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: _pageResult(),
             extractionResult: _extraction(),
             onSongTitleSearch: onSearch,
@@ -1632,7 +1632,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: _pageResult(),
             extractionResult: _extraction(),
             songMatchResult: _undecidedMatch,
@@ -1679,7 +1679,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: null,
             extractionResult: null,
             songMatchResult: _undecidedMatch,
@@ -1718,7 +1718,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: null,
             extractionResult: null,
             onSongTitleSearch: onSearch,
@@ -1828,7 +1828,7 @@ void main() {
       await pumpWide(
         tester,
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           onSongTitleSearch: onSearch,
@@ -1875,7 +1875,7 @@ void main() {
       await pumpWide(
         tester,
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           onSongTitleSearch: onSearch,
@@ -1920,7 +1920,7 @@ void main() {
       await pumpWide(
         tester,
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: _pageResult(),
           extractionResult: inconsistentExtraction(),
           matchedSong: song,
@@ -1943,7 +1943,7 @@ void main() {
       await pumpWide(
         tester,
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           onSongTitleSearch: onSearch,
@@ -1983,7 +1983,7 @@ void main() {
       await pumpWide(
         tester,
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           playRecordRepository: repository,
@@ -2027,7 +2027,7 @@ void main() {
       await pumpWide(
         tester,
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           playRecordRepository: repository,
@@ -2066,7 +2066,7 @@ void main() {
       await pumpWide(
         tester,
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           playRecordRepository: repository,
@@ -2098,7 +2098,7 @@ void main() {
       await pumpWide(
         tester,
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           playRecordRepository: repository,
@@ -2149,7 +2149,7 @@ void main() {
       await pumpWide(
         tester,
         OcrResultScreen(
-          imageFile: File('dummy.png'),
+          imageBytes: Uint8List.fromList(<int>[]),
           pageResult: null,
           extractionResult: null,
           existingRecordId: 'rec-edit-medal',
@@ -2190,7 +2190,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: _pageResult(),
             extractionResult: _extraction(),
           ),
@@ -2245,7 +2245,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: _pageResult(),
             extractionResult: _extraction(),
           ),
@@ -2259,7 +2259,7 @@ void main() {
 
     testWidgets('スコア入力画面（pageResult なし）でも画像が先頭', (WidgetTester tester) async {
       await tester.pumpWidget(
-        _wrap(OcrResultScreen(imageFile: File('dummy.png'))),
+        _wrap(OcrResultScreen(imageBytes: Uint8List.fromList(<int>[]))),
       );
 
       final double top = imageTop(tester);
@@ -2271,7 +2271,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           OcrResultScreen(
-            imageFile: File('dummy.png'),
+            imageBytes: Uint8List.fromList(<int>[]),
             pageResult: _emptyPageResult(),
           ),
         ),

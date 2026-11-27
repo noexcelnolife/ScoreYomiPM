@@ -4,14 +4,13 @@
 // (1) 原画像あり → ボタンを出し、タップで bytes / 保存名 / MIME が gateway へ渡る
 // (2) 原画像なし（空パス） → ボタンを出さない（画像プレビューと同じ条件）
 // (3) 保存ダイアログのキャンセル（戻り値 null） → SnackBar を出さない（無言）
-// (4) 原画像ファイル欠落 → 「画像が見つかりません」SnackBar・保存しない
+// (4) 画像が保存先に無い → 「画像が見つかりません」SnackBar・保存しない
 // (5) ボタンがプレビュー枠の中央に配置される（右揃えからの変更・01a21087）
 //
 // WHY(fake 注入): 保存ダイアログはプラットフォームチャネルを使うため widget
 // テストから直接呼べない。FileExportGateway を差し替えて、画面が渡す引数と
 // 戻り値の扱いだけを検証する（DIP・01a20c14 と同じ方針）。
 
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
@@ -110,14 +109,21 @@ PlayRecord _record({
 }
 
 /// ルート画面から詳細を push する（route() の引数透過もここで通す）。
+///
+/// [imageBytes] を渡すと、そのレコードの画像として保存先に入れてから開く。
+/// 渡さなければ「画像が保存先に無い」状態になる。
 Future<void> _pumpDetail(
   WidgetTester tester, {
   required PlayRecord record,
   required FileExportGateway gateway,
   ImageShareGateway? shareGateway,
+  Uint8List? imageBytes,
 }) async {
   final FakePlayRecordRepository repository = FakePlayRecordRepository()
     ..store[record.id] = record;
+  if (imageBytes != null) {
+    repository.images[record.resultImagePath] = imageBytes;
+  }
   await tester.pumpWidget(
     MaterialApp(
       home: Builder(
@@ -140,18 +146,13 @@ Future<void> _pumpDetail(
   await tester.pumpAndSettle();
 }
 
-/// 実ファイル I/O の完了を待つ。
+/// タップ後の非同期処理と結果表示（SnackBar）を待つ。
 ///
-/// WHY: 原画像の existence チェックと読み込みは本物の dart:io なので、
-/// widget テストの fake async では進まない。実時間を少しずつ進めながら
-/// pump する（backup_screen_test の _pumpThroughRealIo と同じ手法）。
-Future<void> _pumpThroughRealIo(WidgetTester tester) async {
-  for (int i = 0; i < 8; i++) {
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 25)),
-    );
-    await tester.pump();
-  }
+/// WHY(実時間を進めないか): 保存先も通り道（gateway）も fake なので、待つべき
+/// ものはマイクロタスクだけ。実時間に依存するとテストが環境で不安定になる。
+Future<void> _settle(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump();
   await tester.pumpAndSettle();
 }
 
@@ -159,13 +160,14 @@ void main() {
   testWidgets('(1) 画像あり: ボタンが出て、タップで bytes・保存名・MIME が渡る', (
     WidgetTester tester,
   ) async {
-    final File image = createTestImageFile();
+    final Uint8List imageBytes = createTestImageBytes();
     final _FakeFileExportGateway gateway = _FakeFileExportGateway();
 
     await _pumpDetail(
       tester,
-      record: _record(id: 'r-1', imagePath: image.path, songName: 'テスト曲'),
+      record: _record(id: 'r-1', imagePath: 'r-1.png', songName: 'テスト曲'),
       gateway: gateway,
+      imageBytes: imageBytes,
     );
 
     final Finder button = find.byKey(
@@ -175,11 +177,11 @@ void main() {
     expect(find.text('アプリ外に保存'), findsOneWidget);
 
     await tester.tap(button);
-    await _pumpThroughRealIo(tester);
+    await _settle(tester);
 
     expect(gateway.calls, hasLength(1));
     final _SaveCall call = gateway.calls.single;
-    expect(call.bytes, equals(image.readAsBytesSync()), reason: '原画像そのものを渡す');
+    expect(call.bytes, equals(imageBytes), reason: '原画像そのものを渡す');
     // 曲名あり: scoreyomipm_<曲名>_<yyyyMMdd>.<ext>（日付は実行日）
     expect(call.fileName, matches(RegExp(r'^scoreyomipm_テスト曲_\d{8}\.png$')));
     expect(call.mimeType, 'image/png');
@@ -201,43 +203,48 @@ void main() {
   });
 
   testWidgets('(3) キャンセル: SnackBar を出さない', (WidgetTester tester) async {
-    final File image = createTestImageFile();
+    final Uint8List imageBytes = createTestImageBytes();
     final _FakeFileExportGateway gateway = _FakeFileExportGateway(
       savedPath: null,
     );
 
     await _pumpDetail(
       tester,
-      record: _record(id: 'r-3', imagePath: image.path, songName: 'テスト曲'),
+      record: _record(id: 'r-3', imagePath: 'r-3.png', songName: 'テスト曲'),
       gateway: gateway,
+      imageBytes: imageBytes,
     );
 
     await tester.tap(find.byKey(const ValueKey<String>('export-image-button')));
-    await _pumpThroughRealIo(tester);
+    await _settle(tester);
 
     expect(gateway.calls, hasLength(1), reason: '保存ダイアログまでは進む');
     expect(find.byType(SnackBar), findsNothing, reason: 'キャンセルは無言');
     expect(find.text('保存しました'), findsNothing);
   });
 
-  testWidgets('(4) ファイル欠落: 「画像が見つかりません」を出し、保存しない', (WidgetTester tester) async {
-    final File missing = File(
-      '${Directory.systemTemp.path}${Platform.pathSeparator}'
-      'scoreyomipm-missing-${DateTime.now().microsecondsSinceEpoch}.png',
-    );
+  testWidgets('(4) 画像が保存先に無い: 「画像が見つかりません」を出し、保存しない', (WidgetTester tester) async {
     final _FakeFileExportGateway gateway = _FakeFileExportGateway();
 
     await _pumpDetail(
       tester,
-      record: _record(id: 'r-4', imagePath: missing.path, songName: 'テスト曲'),
+      record: _record(id: 'r-4', imagePath: 'missing-save.png', songName: 'テスト曲'),
       gateway: gateway,
     );
 
     await tester.tap(find.byKey(const ValueKey<String>('export-image-button')));
-    await _pumpThroughRealIo(tester);
+    await _settle(tester);
 
     expect(gateway.calls, isEmpty, reason: '読めない画像は渡さない');
-    expect(find.text('画像が見つかりません'), findsOneWidget);
+    // WHY SnackBar に限定するか: プレビュー側も同じ文言のプレースホルダを
+    // 出す（画面全体では 2 つ見つかる）。ここで見たいのは操作の結果通知。
+    expect(
+      find.descendant(
+        of: find.byType(SnackBar),
+        matching: find.text('画像が見つかりません'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('(5) 保存と共有のボタンが 1 行に並び、プレビュー枠の中央に配置される', (
@@ -245,10 +252,11 @@ void main() {
   ) async {
     // WHY(中央揃え): ユーザー指示で右揃えから中央揃えに変更した（01a21087）。
     // ボタンが 2 つになったので「並び全体」の中心で判定する。
-    final File image = createTestImageFile();
+    final Uint8List imageBytes = createTestImageBytes();
     await _pumpDetail(
       tester,
-      record: _record(id: 'r-5', imagePath: image.path, songName: 'テスト曲'),
+      record: _record(id: 'r-5', imagePath: 'result.png', songName: 'テスト曲'),
+      imageBytes: imageBytes,
       gateway: _FakeFileExportGateway(),
     );
 
@@ -279,12 +287,13 @@ void main() {
   testWidgets('(6) 画像あり: 共有ボタンが出て、タップで bytes と共有名が渡る', (
     WidgetTester tester,
   ) async {
-    final File image = createTestImageFile();
+    final Uint8List imageBytes = createTestImageBytes();
     final _FakeImageShareGateway shareGateway = _FakeImageShareGateway();
 
     await _pumpDetail(
       tester,
-      record: _record(id: 'r-6', imagePath: image.path, songName: 'テスト曲'),
+      record: _record(id: 'r-6', imagePath: 'result.png', songName: 'テスト曲'),
+      imageBytes: imageBytes,
       gateway: _FakeFileExportGateway(),
       shareGateway: shareGateway,
     );
@@ -296,11 +305,11 @@ void main() {
     expect(find.text('共有'), findsOneWidget);
 
     await tester.tap(button);
-    await _pumpThroughRealIo(tester);
+    await _settle(tester);
 
     expect(shareGateway.calls, hasLength(1));
     final _ShareCall call = shareGateway.calls.single;
-    expect(call.bytes, equals(image.readAsBytesSync()), reason: '原画像そのものを渡す');
+    expect(call.bytes, equals(imageBytes), reason: '原画像そのものを渡す');
     // 保存と同じ命名規則を共有でも使う（拡張子は共有先が MIME を推測する根拠）。
     expect(call.fileName, matches(RegExp(r'^scoreyomipm_テスト曲_\d{8}\.png$')));
     // WHY 無言か: 共有シートで利用者がキャンセルしても「共有しました」と
@@ -323,42 +332,47 @@ void main() {
     expect(find.text('共有'), findsNothing);
   });
 
-  testWidgets('(8) ファイル欠落: 「画像が見つかりません」を出し、共有しない', (WidgetTester tester) async {
-    final File missing = File(
-      '${Directory.systemTemp.path}${Platform.pathSeparator}'
-      'scoreyomipm-missing-share-${DateTime.now().microsecondsSinceEpoch}.png',
-    );
+  testWidgets('(8) 画像が保存先に無い: 「画像が見つかりません」を出し、共有しない', (WidgetTester tester) async {
     final _FakeImageShareGateway shareGateway = _FakeImageShareGateway();
 
     await _pumpDetail(
       tester,
-      record: _record(id: 'r-8', imagePath: missing.path, songName: 'テスト曲'),
+      record: _record(id: 'r-8', imagePath: 'missing-share.png', songName: 'テスト曲'),
       gateway: _FakeFileExportGateway(),
       shareGateway: shareGateway,
     );
 
     await tester.tap(find.byKey(const ValueKey<String>('share-image-button')));
-    await _pumpThroughRealIo(tester);
+    await _settle(tester);
 
     expect(shareGateway.calls, isEmpty, reason: '読めない画像は渡さない');
-    expect(find.text('画像が見つかりません'), findsOneWidget);
+    // WHY SnackBar に限定するか: プレビュー側も同じ文言のプレースホルダを
+    // 出す（画面全体では 2 つ見つかる）。ここで見たいのは操作の結果通知。
+    expect(
+      find.descendant(
+        of: find.byType(SnackBar),
+        matching: find.text('画像が見つかりません'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('(9) 共有に失敗しても画面は壊れず「共有できませんでした」を出す', (WidgetTester tester) async {
-    final File image = createTestImageFile();
+    final Uint8List imageBytes = createTestImageBytes();
     final _FakeImageShareGateway shareGateway = _FakeImageShareGateway(
       failOnShare: true,
     );
 
     await _pumpDetail(
       tester,
-      record: _record(id: 'r-9', imagePath: image.path, songName: 'テスト曲'),
+      record: _record(id: 'r-9', imagePath: 'result.png', songName: 'テスト曲'),
+      imageBytes: imageBytes,
       gateway: _FakeFileExportGateway(),
       shareGateway: shareGateway,
     );
 
     await tester.tap(find.byKey(const ValueKey<String>('share-image-button')));
-    await _pumpThroughRealIo(tester);
+    await _settle(tester);
 
     expect(shareGateway.calls, hasLength(1));
     expect(find.text('共有できませんでした'), findsOneWidget);

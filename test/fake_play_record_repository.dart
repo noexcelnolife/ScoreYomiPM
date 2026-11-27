@@ -1,11 +1,13 @@
 // PlayRecordRepository のテスト用フェイク。
 //
 // WHY: UI テスト（FR-4 の保存フロー）ではファイル I/O の実装詳細は対象外。
-// インメモリでレコードを保持し、画像は保存せずパス参照のみとする。
+// インメモリでレコードと画像バイト列を保持する。実装と同じく、レコードが
+// 持つのは basename だけ。
 
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:scoreyomipm/data/play_record.dart';
+import 'package:scoreyomipm/data/play_record_bulk_writer.dart';
 import 'package:scoreyomipm/data/play_record_repository.dart';
 
 /// インメモリで動作する [PlayRecordRepository] フェイク。
@@ -18,6 +20,9 @@ class FakePlayRecordRepository implements PlayRecordRepository {
 
   /// id → レコードの内部ストア（テストから直接読み書き可）。
   final Map<String, PlayRecord> store = <String, PlayRecord>{};
+
+  /// 画像のファイル名 → バイト列。存在しない名前は「画像なし」を意味する。
+  final Map<String, Uint8List> images = <String, Uint8List>{};
 
   /// create に渡されたドラフトの履歴（保存内容の検証用）。
   final List<PlayRecordDraft> createdDrafts = <PlayRecordDraft>[];
@@ -37,7 +42,7 @@ class FakePlayRecordRepository implements PlayRecordRepository {
   int _nextId = 1;
 
   @override
-  Future<PlayRecord> create(PlayRecordDraft draft, File? resultImage) async {
+  Future<PlayRecord> create(PlayRecordDraft draft, Uint8List? resultImageBytes) async {
     if (failOnCreate) {
       throw Exception('create failed (fake)');
     }
@@ -45,10 +50,14 @@ class FakePlayRecordRepository implements PlayRecordRepository {
     final String id = 'fake-$_nextId';
     _nextId++;
     // WHY(v4 案2): 本実装と同じく null 画像は空文字パスを用いる。
+    final String imageName = resultImageBytes == null ? '' : '$id.png';
     final PlayRecord record = draft.toPlayRecord(
       id: id,
-      resultImagePath: resultImage?.path ?? '',
+      resultImagePath: imageName,
     );
+    if (resultImageBytes != null) {
+      images[imageName] = resultImageBytes;
+    }
     store[id] = record;
     return record;
   }
@@ -88,5 +97,24 @@ class FakePlayRecordRepository implements PlayRecordRepository {
   @override
   Future<void> delete(String id) async {
     store.remove(id);
+  }
+
+  @override
+  Future<Uint8List?> readImage(String imageKey) async {
+    return images[imageKey];
+  }
+
+  @override
+  Future<BulkImportResult> importAll(
+    List<PlayRecord> records, {
+    required bool replaceAll,
+    Map<String, Uint8List?>? imageBytesById,
+  }) async {
+    // フェイク：すべてインポート成功、画像は無視。
+    return BulkImportResult(
+      imported: records.length,
+      skipped: 0,
+      missingImages: 0,
+    );
   }
 }

@@ -25,6 +25,7 @@ import 'package:scoreyomipm/ui/ocr_result_screen.dart';
 
 import 'fake_ocr_engine.dart';
 import 'fake_play_record_repository.dart';
+import 'real_async_helper.dart';
 import 'root_bundle_warmup.dart';
 import 'test_image_helper.dart';
 
@@ -122,7 +123,7 @@ void main() {
   testWidgets('OCR 失敗時、画像だけの未確定レコードが自動保存され SnackBar が出る', (
     WidgetTester tester,
   ) async {
-    final File image = createTestImageFile();
+    createTestImageFile();
     final FakePlayRecordRepository repository = FakePlayRecordRepository();
 
     await tester.pumpWidget(
@@ -131,7 +132,7 @@ void main() {
           ocrEngine: FakeOcrEngine(onRecognize: _throwOnRecognize),
           songDatabaseService: _FakeSongDatabaseService(),
           playRecordRepository: repository,
-          imagePicker: _FakeImagePicker(XFile(image.path)),
+          imagePicker: _FakeImagePicker(XFile(createTestImageFile().path)),
         ),
       ),
     );
@@ -142,7 +143,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('HC プレーシェア'));
     await tester.pump();
-    await tester.pumpAndSettle();
+    // WHY(実 I/O を待つか): 失敗時は原画像を読み出して未確定レコードとして
+    // 保存する。FakeAsync 下ではその読み出しが完了しないため、実時間を進める。
+    await pumpThroughRealIo(tester);
 
     expect(find.textContaining('OCRに失敗したため未確定レコードとして保存しました'), findsOneWidget);
     expect(repository.createdDrafts, hasLength(1));
@@ -150,7 +153,7 @@ void main() {
     expect(repository.createdDrafts.single.songName, isNull);
     expect(repository.createdDrafts.single.source, PlayRecordSource.playshare);
     expect(repository.store, hasLength(1));
-    expect(repository.store.values.single.resultImagePath, image.path);
+    expect(repository.store.values.single.resultImagePath, isNotEmpty);
     // 改修1: OCR 失敗時は編集画面へ遷移していないため、プレビューはクリアしない
     //（エラーカードと合わせて取り込み直しの文脈を保持する・リード裁定）。
     expect(find.byType(Image), findsOneWidget);
@@ -159,7 +162,7 @@ void main() {
   testWidgets('収録曲辞書のタイトル行に総曲数の subtitle を常設する（案A）', (
     WidgetTester tester,
   ) async {
-    final File image = createTestImageFile();
+    createTestImageFile();
 
     await tester.pumpWidget(
       MaterialApp(
@@ -167,7 +170,7 @@ void main() {
           ocrEngine: FakeOcrEngine(),
           songDatabaseService: _FakeSongDatabaseService(),
           playRecordRepository: FakePlayRecordRepository(),
-          imagePicker: _FakeImagePicker(XFile(image.path)),
+          imagePicker: _FakeImagePicker(XFile(createTestImageFile().path)),
         ),
       ),
     );
@@ -182,7 +185,7 @@ void main() {
   });
 
   testWidgets('履歴アイコンから未確定レコード一覧へ遷移する', (WidgetTester tester) async {
-    final File image = createTestImageFile();
+    createTestImageFile();
     final FakePlayRecordRepository repository = FakePlayRecordRepository();
 
     await tester.pumpWidget(
@@ -191,7 +194,7 @@ void main() {
           ocrEngine: FakeOcrEngine(),
           songDatabaseService: _FakeSongDatabaseService(),
           playRecordRepository: repository,
-          imagePicker: _FakeImagePicker(XFile(image.path)),
+          imagePicker: _FakeImagePicker(XFile(createTestImageFile().path)),
         ),
       ),
     );
@@ -207,7 +210,7 @@ void main() {
   });
 
   testWidgets('プレーシェア画像の失効ガイドを表示する（FR-8）', (WidgetTester tester) async {
-    final File image = createTestImageFile();
+    createTestImageFile();
     final FakePlayRecordRepository repository = FakePlayRecordRepository();
 
     await tester.pumpWidget(
@@ -216,7 +219,7 @@ void main() {
           ocrEngine: FakeOcrEngine(),
           songDatabaseService: _FakeSongDatabaseService(),
           playRecordRepository: repository,
-          imagePicker: _FakeImagePicker(XFile(image.path)),
+          imagePicker: _FakeImagePicker(XFile(createTestImageFile().path)),
         ),
       ),
     );
@@ -228,7 +231,7 @@ void main() {
   });
 
   testWidgets('失効ガイド文言は確定文言どおりに表示される（FR-8・文言固定）', (WidgetTester tester) async {
-    final File image = createTestImageFile();
+    createTestImageFile();
     final FakePlayRecordRepository repository = FakePlayRecordRepository();
 
     await tester.pumpWidget(
@@ -237,7 +240,7 @@ void main() {
           ocrEngine: FakeOcrEngine(),
           songDatabaseService: _FakeSongDatabaseService(),
           playRecordRepository: repository,
-          imagePicker: _FakeImagePicker(XFile(image.path)),
+          imagePicker: _FakeImagePicker(XFile(createTestImageFile().path)),
         ),
       ),
     );
@@ -249,7 +252,7 @@ void main() {
   testWidgets('OCR 成功で編集画面から戻ったあとは、プレビューをクリアする（v2 UX 改修1）', (
     WidgetTester tester,
   ) async {
-    final File image = createTestImageFile();
+    createTestImageFile();
     final FakePlayRecordRepository repository = FakePlayRecordRepository();
 
     await tester.pumpWidget(
@@ -262,7 +265,7 @@ void main() {
           ),
           songDatabaseService: _FakeSongDatabaseService(),
           playRecordRepository: repository,
-          imagePicker: _FakeImagePicker(XFile(image.path)),
+          imagePicker: _FakeImagePicker(XFile(createTestImageFile().path)),
         ),
       ),
     );
@@ -292,7 +295,7 @@ void main() {
   testWidgets('OCR run をまたぐとライブ辞書キャッシュが再構築される（v2 UX #13 フォローアップ）', (
     WidgetTester tester,
   ) async {
-    final File image = createTestImageFile();
+    createTestImageFile();
     final FakePlayRecordRepository repository = FakePlayRecordRepository();
     // 辞書 v1: 旧曲のみ。run 1 のライブ検索がこの辞書で照合することを先に証明する。
     final _SwappableSongRepository songRepository = _SwappableSongRepository(
@@ -341,7 +344,7 @@ void main() {
           ocrEngine: ocrEngine,
           songDatabaseService: _FakeSongDatabaseService(),
           playRecordRepository: repository,
-          imagePicker: _FakeImagePicker(XFile(image.path)),
+          imagePicker: _FakeImagePicker(XFile(createTestImageFile().path)),
           mainSongRepository: songRepository,
         ),
       ),

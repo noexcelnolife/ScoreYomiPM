@@ -6,7 +6,7 @@
 // (c) 入力画面: テンプレートを選ぶとメモ欄へ差し込まれる（既存文とは改行区切り）
 // (d) シート: 空状態の案内 / 追加 / 削除
 // (e) シート: 選択した本文が呼び出し元へ返る
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -38,7 +38,7 @@ Widget _wrap(Widget child) => MaterialApp(theme: _testTheme, home: child);
 Widget _wrapSheet(Widget child) => _wrap(Scaffold(body: child));
 
 /// メモ付きの確定レコードを作る。
-PlayRecord _recordWithMemo(File image, {String? memo}) {
+PlayRecord _recordWithMemo(Uint8List? imageBytes, {String? memo}) {
   return PlayRecordDraft(
     songName: 'テスト曲',
     score: 98000,
@@ -47,7 +47,7 @@ PlayRecord _recordWithMemo(File image, {String? memo}) {
     memo: memo,
   ).toPlayRecord(
     id: 'r-memo',
-    resultImagePath: image.path,
+    resultImagePath: '',
     playedAt: DateTime(2026, 11, 26, 10),
   );
 }
@@ -62,7 +62,7 @@ Widget _manualForm({
   MemoTemplateRepository? memoTemplateRepository,
 }) {
   return OcrResultScreen(
-    imageFile: null,
+    imageBytes: null,
     playRecordRepository: repository,
     existingRecordId: 'r-memo',
     memoTemplateRepository: memoTemplateRepository,
@@ -72,9 +72,9 @@ Widget _manualForm({
 void main() {
   group('詳細画面のメモ表示', () {
     testWidgets('メモがあると「メモ」行に本文が出る', (WidgetTester tester) async {
-      final File image = createTestImageFile();
+      final Uint8List imageBytes = createTestImageFile().readAsBytesSync();
       final FakePlayRecordRepository repository = FakePlayRecordRepository();
-      repository.store['r-memo'] = _recordWithMemo(image, memo: '精度重視\nBP 更新');
+      repository.store['r-memo'] = _recordWithMemo(imageBytes, memo: '精度重視\nBP 更新');
 
       await tester.pumpWidget(
         _wrap(
@@ -92,9 +92,9 @@ void main() {
     });
 
     testWidgets('メモが無ければ「メモ」行を出さない', (WidgetTester tester) async {
-      final File image = createTestImageFile();
+      final Uint8List imageBytes = createTestImageFile().readAsBytesSync();
       final FakePlayRecordRepository repository = FakePlayRecordRepository();
-      repository.store['r-memo'] = _recordWithMemo(image);
+      repository.store['r-memo'] = _recordWithMemo(imageBytes);
 
       await tester.pumpWidget(
         _wrap(
@@ -114,7 +114,7 @@ void main() {
   group('入力画面のメモ欄', () {
     testWidgets('メモ欄は供給元が無くても表示される', (WidgetTester tester) async {
       final FakePlayRecordRepository repository = FakePlayRecordRepository();
-      repository.store['r-memo'] = _recordWithMemo(createTestImageFile());
+      repository.store['r-memo'] = _recordWithMemo(createTestImageFile().readAsBytesSync());
 
       await tester.pumpWidget(_wrap(_manualForm(repository: repository)));
       await tester.pumpAndSettle();
@@ -129,7 +129,7 @@ void main() {
 
     testWidgets('供給元があればテンプレートボタンが出る', (WidgetTester tester) async {
       final FakePlayRecordRepository repository = FakePlayRecordRepository();
-      repository.store['r-memo'] = _recordWithMemo(createTestImageFile());
+      repository.store['r-memo'] = _recordWithMemo(createTestImageFile().readAsBytesSync());
 
       await tester.pumpWidget(
         _wrap(
@@ -151,7 +151,7 @@ void main() {
 
     testWidgets('選んだテンプレートが空のメモ欄に差し込まれる', (WidgetTester tester) async {
       final FakePlayRecordRepository repository = FakePlayRecordRepository();
-      repository.store['r-memo'] = _recordWithMemo(createTestImageFile());
+      repository.store['r-memo'] = _recordWithMemo(createTestImageFile().readAsBytesSync());
 
       await tester.pumpWidget(
         _wrap(
@@ -186,7 +186,7 @@ void main() {
     testWidgets('既存メモがあるときは改行で区切って追記する', (WidgetTester tester) async {
       final FakePlayRecordRepository repository = FakePlayRecordRepository();
       repository.store['r-memo'] = _recordWithMemo(
-        createTestImageFile(),
+        createTestImageFile().readAsBytesSync(),
         memo: '既存メモ',
       );
 
