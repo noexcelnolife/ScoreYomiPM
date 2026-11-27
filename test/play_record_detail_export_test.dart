@@ -21,6 +21,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:scoreyomipm/data/play_record.dart';
 import 'package:scoreyomipm/ui/file_export_gateway.dart';
 import 'package:scoreyomipm/ui/play_record_detail_screen.dart';
+import 'package:scoreyomipm/ui/share_gateway.dart';
 
 import 'fake_ocr_engine.dart';
 import 'fake_play_record_repository.dart';
@@ -62,6 +63,35 @@ class _FakeFileExportGateway implements FileExportGateway {
   }
 }
 
+/// [ImageShareGateway.shareImage] に渡された引数の記録。
+class _ShareCall {
+  _ShareCall({required this.bytes, required this.fileName});
+
+  final Uint8List bytes;
+  final String fileName;
+}
+
+/// 共有シートの代わりに呼び出しを記録する fake。
+///
+/// [failOnShare] が true なら「共有シートを開けない環境」を表す。
+class _FakeImageShareGateway implements ImageShareGateway {
+  _FakeImageShareGateway({this.failOnShare = false});
+
+  final bool failOnShare;
+  final List<_ShareCall> calls = <_ShareCall>[];
+
+  @override
+  Future<void> shareImage({
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    calls.add(_ShareCall(bytes: bytes, fileName: fileName));
+    if (failOnShare) {
+      throw Exception('共有シートを開けない');
+    }
+  }
+}
+
 /// 詳細画面に表示するレコードを 1 件作る。
 PlayRecord _record({
   required String id,
@@ -84,6 +114,7 @@ Future<void> _pumpDetail(
   WidgetTester tester, {
   required PlayRecord record,
   required FileExportGateway gateway,
+  ImageShareGateway? shareGateway,
 }) async {
   final FakePlayRecordRepository repository = FakePlayRecordRepository()
     ..store[record.id] = record;
@@ -97,6 +128,7 @@ Future<void> _pumpDetail(
               ocrEngine: FakeOcrEngine(),
               recordId: record.id,
               fileExportGateway: gateway,
+              imageShareGateway: shareGateway,
             ),
           ),
           child: const Text('open'),
@@ -208,10 +240,11 @@ void main() {
     expect(find.text('画像が見つかりません'), findsOneWidget);
   });
 
-  testWidgets('(5) ボタンはプレビュー枠の中央に配置される', (WidgetTester tester) async {
+  testWidgets('(5) 保存と共有のボタンが 1 行に並び、プレビュー枠の中央に配置される', (
+    WidgetTester tester,
+  ) async {
     // WHY(中央揃え): ユーザー指示で右揃えから中央揃えに変更した（01a21087）。
-    // プレビュー枠は横幅いっぱい（width: double.infinity）なので、枠の中心 x と
-    // ボタンの中心 x が一致すれば「中央」と言える。
+    // ボタンが 2 つになったので「並び全体」の中心で判定する。
     final File image = createTestImageFile();
     await _pumpDetail(
       tester,
@@ -220,13 +253,119 @@ void main() {
     );
 
     final Rect preview = tester.getRect(find.byType(InteractiveViewer));
-    final Rect button = tester.getRect(
-      find.byKey(const ValueKey<String>('export-image-button')),
+    final Rect actions = tester.getRect(
+      find.byKey(const ValueKey<String>('image-actions')),
     );
     expect(
-      button.center.dx,
+      actions.center.dx,
       moreOrLessEquals(preview.center.dx, epsilon: 0.5),
-      reason: '右揃え（Align.centerRight）だと中央からボタン半分ぶん右にずれる',
+      reason: '右揃え（Align.centerRight）だと中央から並び半分ぶん右にずれる',
+    );
+
+    final Rect save = tester.getRect(
+      find.byKey(const ValueKey<String>('export-image-button')),
+    );
+    final Rect share = tester.getRect(
+      find.byKey(const ValueKey<String>('share-image-button')),
+    );
+    expect(
+      share.center.dy,
+      moreOrLessEquals(save.center.dy, epsilon: 0.5),
+      reason: '横幅に収まるなら折り返さず 1 行に並べる',
+    );
+    expect(share.left, greaterThan(save.right), reason: '保存 → 共有の順に置く');
+  });
+
+  testWidgets('(6) 画像あり: 共有ボタンが出て、タップで bytes と共有名が渡る', (
+    WidgetTester tester,
+  ) async {
+    final File image = createTestImageFile();
+    final _FakeImageShareGateway shareGateway = _FakeImageShareGateway();
+
+    await _pumpDetail(
+      tester,
+      record: _record(id: 'r-6', imagePath: image.path, songName: 'テスト曲'),
+      gateway: _FakeFileExportGateway(),
+      shareGateway: shareGateway,
+    );
+
+    final Finder button = find.byKey(
+      const ValueKey<String>('share-image-button'),
+    );
+    expect(button, findsOneWidget);
+    expect(find.text('共有'), findsOneWidget);
+
+    await tester.tap(button);
+    await _pumpThroughRealIo(tester);
+
+    expect(shareGateway.calls, hasLength(1));
+    final _ShareCall call = shareGateway.calls.single;
+    expect(call.bytes, equals(image.readAsBytesSync()), reason: '原画像そのものを渡す');
+    // 保存と同じ命名規則を共有でも使う（拡張子は共有先が MIME を推測する根拠）。
+    expect(call.fileName, matches(RegExp(r'^scoreyomipm_テスト曲_\d{8}\.png$')));
+    // WHY 無言か: 共有シートで利用者がキャンセルしても「共有しました」と
+    // 出してしまうため、成否のトーストは出さない。
+    expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('(7) 画像なし: 共有ボタンを出さない', (WidgetTester tester) async {
+    await _pumpDetail(
+      tester,
+      record: _record(id: 'r-7', imagePath: '', songName: 'テスト曲'),
+      gateway: _FakeFileExportGateway(),
+      shareGateway: _FakeImageShareGateway(),
+    );
+
+    expect(
+      find.byKey(const ValueKey<String>('share-image-button')),
+      findsNothing,
+    );
+    expect(find.text('共有'), findsNothing);
+  });
+
+  testWidgets('(8) ファイル欠落: 「画像が見つかりません」を出し、共有しない', (WidgetTester tester) async {
+    final File missing = File(
+      '${Directory.systemTemp.path}${Platform.pathSeparator}'
+      'scoreyomipm-missing-share-${DateTime.now().microsecondsSinceEpoch}.png',
+    );
+    final _FakeImageShareGateway shareGateway = _FakeImageShareGateway();
+
+    await _pumpDetail(
+      tester,
+      record: _record(id: 'r-8', imagePath: missing.path, songName: 'テスト曲'),
+      gateway: _FakeFileExportGateway(),
+      shareGateway: shareGateway,
+    );
+
+    await tester.tap(find.byKey(const ValueKey<String>('share-image-button')));
+    await _pumpThroughRealIo(tester);
+
+    expect(shareGateway.calls, isEmpty, reason: '読めない画像は渡さない');
+    expect(find.text('画像が見つかりません'), findsOneWidget);
+  });
+
+  testWidgets('(9) 共有に失敗しても画面は壊れず「共有できませんでした」を出す', (WidgetTester tester) async {
+    final File image = createTestImageFile();
+    final _FakeImageShareGateway shareGateway = _FakeImageShareGateway(
+      failOnShare: true,
+    );
+
+    await _pumpDetail(
+      tester,
+      record: _record(id: 'r-9', imagePath: image.path, songName: 'テスト曲'),
+      gateway: _FakeFileExportGateway(),
+      shareGateway: shareGateway,
+    );
+
+    await tester.tap(find.byKey(const ValueKey<String>('share-image-button')));
+    await _pumpThroughRealIo(tester);
+
+    expect(shareGateway.calls, hasLength(1));
+    expect(find.text('共有できませんでした'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('share-image-button')),
+      findsOneWidget,
+      reason: '例外を握って画面は残る',
     );
   });
 }

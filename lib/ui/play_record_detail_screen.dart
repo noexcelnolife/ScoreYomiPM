@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -14,6 +15,7 @@ import 'difficulty_color.dart';
 import 'file_export_gateway.dart';
 import 'image_export.dart';
 import 'ocr_result_screen.dart';
+import 'share_gateway.dart';
 import 'song_title_live_search.dart';
 
 /// FR-11: 記録詳細画面（全フィールド＋原画像）。
@@ -30,6 +32,7 @@ class PlayRecordDetailScreen extends StatefulWidget {
     this.mainSongRepository,
     this.additionalSongRepository,
     this.fileExportGateway,
+    this.imageShareGateway,
     this.memoTemplateRepository,
   });
 
@@ -57,6 +60,12 @@ class PlayRecordDetailScreen extends StatefulWidget {
   /// 呼べない。未指定なら実端末向け実装を使い、テストでは fake を注入する。
   final FileExportGateway? fileExportGateway;
 
+  /// 原画像を共有シートへ渡すときの境界（任意注入）。
+  ///
+  /// WHY: [fileExportGateway] と同じ理由（プラットフォームチャネルは widget
+  /// テストから直接呼べない）。未指定なら実端末向け実装を使う。
+  final ImageShareGateway? imageShareGateway;
+
   /// メモのテンプレート供給元（修正画面へ経由渡し・任意）。
   ///
   /// WHY この画面が持つか: メモの編集は「修正」＝[OcrResultScreen] で行うため、
@@ -71,6 +80,7 @@ class PlayRecordDetailScreen extends StatefulWidget {
     SongRepository? mainSongRepository,
     SongRepository? additionalSongRepository,
     FileExportGateway? fileExportGateway,
+    ImageShareGateway? imageShareGateway,
     MemoTemplateRepository? memoTemplateRepository,
   }) {
     return MaterialPageRoute<void>(
@@ -81,6 +91,7 @@ class PlayRecordDetailScreen extends StatefulWidget {
         mainSongRepository: mainSongRepository,
         additionalSongRepository: additionalSongRepository,
         fileExportGateway: fileExportGateway,
+        imageShareGateway: imageShareGateway,
         memoTemplateRepository: memoTemplateRepository,
       ),
     );
@@ -199,7 +210,20 @@ class _PlayRecordDetailScreenState extends State<PlayRecordDetailScreen> {
           // WHY(位置): 原画像がある行にだけ出す操作なので、プレビューの直下に
           // 置く（プレビュー節ごと非表示になる条件と一致させる）。
           // 配置は右揃えではなく中央揃え（ユーザー指示 01a21087）。
-          Center(child: _exportImageButton(record)),
+          // 原画像の操作（保存・共有）。狭い画面や大きな文字サイズでも
+          // はみ出さないよう、1 行に収まらない場合は折り返す（中央揃え維持）。
+          Center(
+            child: Wrap(
+              key: const ValueKey<String>('image-actions'),
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                _exportImageButton(record),
+                _shareImageButton(record),
+              ],
+            ),
+          ),
         ],
         const SizedBox(height: 12),
         _actionButtons(context, record),
@@ -287,6 +311,54 @@ class _PlayRecordDetailScreenState extends State<PlayRecordDetailScreen> {
     _showSnackBar('保存しました');
   }
 
+  /// 原画像を「共有」するボタン。
+  ///
+  /// WHY 保存と別に置くか: 保存は「端末の好きな場所に残す」、共有は「他のアプリ
+  /// へそのまま渡す」で目的が違う。共有は保存先を選ばせず共有シートに渡す。
+  Widget _shareImageButton(PlayRecord record) {
+    return OutlinedButton.icon(
+      key: const ValueKey<String>('share-image-button'),
+      onPressed: () => _shareImage(record),
+      icon: const Icon(Icons.share_outlined),
+      label: const Text('共有'),
+    );
+  }
+
+  /// 原画像を共有シートへ渡す。
+  Future<void> _shareImage(PlayRecord record) async {
+    final Uint8List? bytes = await _readImageBytes(record.resultImagePath);
+    if (!mounted) {
+      return;
+    }
+    if (bytes == null) {
+      _showSnackBar('画像が見つかりません');
+      return;
+    }
+    try {
+      await _imageShareGateway.shareImage(
+        bytes: bytes,
+        fileName: buildImageExportFileName(
+          recordId: record.id,
+          songName: record.songName,
+          imagePath: record.resultImagePath,
+          now: DateTime.now(),
+        ),
+      );
+    } on Exception catch (error, stackTrace) {
+      // WHY 例外を握るか: 共有シートを開けない環境（プラグイン未実装・
+      // 共有先アプリ無し）でも画面を壊さない。利用者には 1 行で伝える。
+      developer.log(
+        '原画像の共有に失敗しました',
+        name: 'PlayRecordDetailScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        _showSnackBar('共有できませんでした');
+      }
+    }
+  }
+
   /// 原画像のバイト列を読む。存在しない・読めない場合は null。
   ///
   /// WHY: 存在確認と読み込みは別の操作なので、確認直後にファイルが消えた
@@ -312,6 +384,9 @@ class _PlayRecordDetailScreenState extends State<PlayRecordDetailScreen> {
 
   FileExportGateway get _fileExportGateway =>
       widget.fileExportGateway ?? const PlatformFileExportGateway();
+
+  ImageShareGateway get _imageShareGateway =>
+      widget.imageShareGateway ?? const PlatformImageShareGateway();
 
   /// アクション行: 修正 / 再OCR（未確定のみ） / 削除。
   ///
