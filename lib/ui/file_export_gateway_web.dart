@@ -3,6 +3,9 @@
 // このファイルは `file_export_gateway.dart` から条件付きエクスポートされる。
 // Web プラットフォームでは dart:io が実行時に UnsupportedError を出すため、
 // ブラウザのダウンロード機能（AnchorElement.download）を使用する。
+//
+// dart:html を使う理由（package:web ではなく）: Tier A は --wasm ビルドを対象外にしているため、
+// dart:html の利用は許容される（計画 D11）。--wasm に移行する際は package:web への移行が必要。
 
 import 'dart:html' as html;
 import 'dart:typed_data';
@@ -16,10 +19,14 @@ class PlatformFileExportGateway implements FileExportGateway {
   const PlatformFileExportGateway();
 
   @override
-  Future<XFile?> pickZip() async {
-    // Web ではファイル選択ダイアログはプラットフォームチャネル経由のため未サポート。
-    // 将来 `file_selector` の Web 実装を使う場合はここに移行する。
-    return null;
+  Future<XFile?> pickZip() {
+    // WHY(file_selector): `pickZip()` は `file_selector` の `openFile()` だけで実装でき、
+    // `dart:io` は一切使わない。io 版と同じコードで Web でも動作する（確認済み）。
+    return openFile(
+      acceptedTypeGroups: const <XTypeGroup>[
+        XTypeGroup(label: 'ZIP', extensions: <String>['zip']),
+      ],
+    );
   }
 
   @override
@@ -36,7 +43,13 @@ class PlatformFileExportGateway implements FileExportGateway {
     html.AnchorElement(href: url)
       ..setAttribute('download', fileName)
       ..click();
+
+    // WHY(revokeObjectUrl のタイミング): click() の直後に revoke すると、
+    // ブラウザ（Firefox / Safari 等）によってはダウンロードが始まる前に URL が無効化され失敗する。
+    // 次のイベントループに譲ってから revoke する。
+    await Future<void>.delayed(const Duration(seconds: 1));
     html.Url.revokeObjectUrl(url);
+
     return fileName;
   }
 }
