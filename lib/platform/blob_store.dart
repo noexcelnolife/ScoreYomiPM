@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:typed_data';
 
 /// プラットフォーム共通のブロブストア抽象。
@@ -6,6 +5,8 @@ import 'dart:typed_data';
 /// ファイルシステム・メモリ上の生バイト列をキー値で読み書きする。
 /// UI 層・ドメイン層はこの抽象のみに依存し、具体的なストレージ実装に
 /// 依存しない（DIP）。
+///
+/// dart:io を import しない。Web ビルドでもこのファイル単体で import できる。
 abstract class BlobStore {
   /// [key] に紐づくバイト列を返す。存在しない場合は `null`。
   Future<Uint8List?> read(String key);
@@ -24,128 +25,6 @@ abstract class BlobStore {
 
   /// [prefix] で始まるすべてのエントリを削除する。
   Future<void> deleteWhere(String prefix);
-}
-
-/// ファイルシステム上の [BlobStore] 実装。
-///
-/// [baseDirectory] を基点とし、[key] は `/` 区切りの相対パスとして解決される。
-/// `..` を含むキーはパストラバーサル攻撃の対象となるため拒否する。
-class IoBlobStore implements BlobStore {
-  /// 基点ディレクトリ。相対パスの解決基準となる。
-  final Directory baseDirectory;
-
-  IoBlobStore(this.baseDirectory);
-
-  @override
-  Future<Uint8List?> read(String key) async {
-    _validateKey(key);
-    final file = File(_path(key));
-    if (!await file.exists()) return null;
-    return file.readAsBytes();
-  }
-
-  @override
-  Future<void> write(String key, Uint8List bytes) async {
-    _validateKey(key);
-    final file = File(_path(key));
-    await file.parent.create(recursive: true);
-    await file.writeAsBytes(bytes);
-  }
-
-  @override
-  Future<void> delete(String key) async {
-    _validateKey(key);
-    final file = File(_path(key));
-    if (await file.exists()) await file.delete();
-  }
-
-  @override
-  Future<bool> exists(String key) async {
-    _validateKey(key);
-    final file = File(_path(key));
-    return await file.exists();
-  }
-
-  @override
-  Future<List<String>> listKeys(String prefix) async {
-    _validateKeyPrefix(prefix);
-    final dir = Directory(_path(prefix));
-    if (!await dir.exists()) {
-      // prefix がファイルの場合、そのファイル単体で返す
-      final file = File(_path(prefix));
-      if (await file.exists()) return [prefix];
-      return [];
-    }
-    final result = <String>[];
-    final base = baseDirectory.path;
-    await for (final entity in dir.list(recursive: true, followLinks: false)) {
-      if (entity is File) {
-        final abs = entity.path;
-        if (!abs.startsWith(base)) continue;
-        var rel = abs.substring(base.length);
-        // 先頭の区切り文字を除去
-        while (rel.isNotEmpty && (rel[0] == '/' || rel[0] == '\\')) {
-          rel = rel.substring(1);
-        }
-        rel = _toKeyPath(rel);
-        if (rel.startsWith(prefix)) result.add(rel);
-      }
-    }
-    result.sort();
-    return result;
-  }
-
-  @override
-  Future<void> deleteWhere(String prefix) async {
-    _validateKeyPrefix(prefix);
-    final dir = Directory(_path(prefix));
-    if (await dir.exists()) {
-      await dir.delete(recursive: true);
-      return;
-    }
-    final file = File(_path(prefix));
-    if (await file.exists()) await file.delete();
-  }
-
-  /// key をネイティブファイルシステムパスに変換する（`/` → ディレクトリ区切り文字）。
-  String _toNativePath(String key) {
-    if (Platform.isWindows) return key.replaceAll('/', '\\');
-    return key;
-  }
-
-  /// ネイティブファイルシステムパスを key 形式に変換する（ディレクトリ区切り文字 → `/`）。
-  String _toKeyPath(String path) {
-    if (Platform.isWindows) return path.replaceAll('\\', '/');
-    return path;
-  }
-
-  /// baseDirectory と key をプラットフォーム適切な区切り文字で連結する。
-  String _path(String key) {
-    final sep = Platform.isWindows ? '\\' : '/';
-    final base = baseDirectory.path;
-    final b = base.endsWith(sep) || base.endsWith(Platform.isWindows ? '/' : '\\')
-        ? base
-        : '$base$sep';
-    return '$b${_toNativePath(key)}';
-  }
-
-  /// パストラバーサル攻撃を防ぐため、キーに `..` セグメントを含む場合は拒否する。
-  void _validateKey(String key) {
-    final segments = key.split('/');
-    if (segments.any((s) => s == '..')) {
-      throw ArgumentError.value(key, 'key', 'パストラバーサルが検出されました（「.." は使用できません）');
-    }
-    if (key.startsWith(Platform.pathSeparator) ||
-        (Platform.isWindows && key.contains(RegExp(r'^[a-zA-Z]:\\')))) {
-      throw ArgumentError.value(key, 'key', '絶対パスは使用できません');
-    }
-  }
-
-  /// prefix もキーとして扱うため、同様に `..` を拒否する。
-  void _validateKeyPrefix(String prefix) {
-    if (prefix.isEmpty) return;
-    _validateKey(prefix);
-  }
 }
 
 /// メモリ上の [BlobStore] 実装。テスト用。

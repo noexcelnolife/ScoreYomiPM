@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:scoreyomipm/platform/blob_store.dart';
+import 'package:scoreyomipm/platform/io_blob_store.dart';
 
 void main() {
   group('MemoryBlobStore', () {
