@@ -39,7 +39,7 @@ class IoBlobStore implements BlobStore {
   @override
   Future<Uint8List?> read(String key) async {
     _validateKey(key);
-    final file = File('${baseDirectory.path}/${_toNativePath(key)}');
+    final file = File(_path(key));
     if (!await file.exists()) return null;
     return file.readAsBytes();
   }
@@ -47,7 +47,7 @@ class IoBlobStore implements BlobStore {
   @override
   Future<void> write(String key, Uint8List bytes) async {
     _validateKey(key);
-    final file = File('${baseDirectory.path}/${_toNativePath(key)}');
+    final file = File(_path(key));
     await file.parent.create(recursive: true);
     await file.writeAsBytes(bytes);
   }
@@ -55,31 +55,39 @@ class IoBlobStore implements BlobStore {
   @override
   Future<void> delete(String key) async {
     _validateKey(key);
-    final file = File('${baseDirectory.path}/${_toNativePath(key)}');
+    final file = File(_path(key));
     if (await file.exists()) await file.delete();
   }
 
   @override
   Future<bool> exists(String key) async {
     _validateKey(key);
-    final file = File('${baseDirectory.path}/${_toNativePath(key)}');
+    final file = File(_path(key));
     return await file.exists();
   }
 
   @override
   Future<List<String>> listKeys(String prefix) async {
     _validateKeyPrefix(prefix);
-    final dir = Directory('${baseDirectory.path}/${_toNativePath(prefix)}');
+    final dir = Directory(_path(prefix));
     if (!await dir.exists()) {
       // prefix がファイルの場合、そのファイル単体で返す
-      final file = File('${baseDirectory.path}/${_toNativePath(prefix)}');
+      final file = File(_path(prefix));
       if (await file.exists()) return [prefix];
       return [];
     }
     final result = <String>[];
+    final base = baseDirectory.path;
     await for (final entity in dir.list(recursive: true, followLinks: false)) {
       if (entity is File) {
-        final rel = _toKeyPath(entity.path);
+        final abs = entity.path;
+        if (!abs.startsWith(base)) continue;
+        var rel = abs.substring(base.length);
+        // 先頭の区切り文字を除去
+        while (rel.isNotEmpty && (rel[0] == '/' || rel[0] == '\\')) {
+          rel = rel.substring(1);
+        }
+        rel = _toKeyPath(rel);
         if (rel.startsWith(prefix)) result.add(rel);
       }
     }
@@ -90,12 +98,12 @@ class IoBlobStore implements BlobStore {
   @override
   Future<void> deleteWhere(String prefix) async {
     _validateKeyPrefix(prefix);
-    final dir = Directory('${baseDirectory.path}/${_toNativePath(prefix)}');
+    final dir = Directory(_path(prefix));
     if (await dir.exists()) {
       await dir.delete(recursive: true);
       return;
     }
-    final file = File('${baseDirectory.path}/${_toNativePath(prefix)}');
+    final file = File(_path(prefix));
     if (await file.exists()) await file.delete();
   }
 
@@ -109,6 +117,16 @@ class IoBlobStore implements BlobStore {
   String _toKeyPath(String path) {
     if (Platform.isWindows) return path.replaceAll('\\', '/');
     return path;
+  }
+
+  /// baseDirectory と key をプラットフォーム適切な区切り文字で連結する。
+  String _path(String key) {
+    final sep = Platform.isWindows ? '\\' : '/';
+    final base = baseDirectory.path;
+    final b = base.endsWith(sep) || base.endsWith(Platform.isWindows ? '/' : '\\')
+        ? base
+        : '$base$sep';
+    return '$b${_toNativePath(key)}';
   }
 
   /// パストラバーサル攻撃を防ぐため、キーに `..` セグメントを含む場合は拒否する。
