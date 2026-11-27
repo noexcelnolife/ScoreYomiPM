@@ -27,6 +27,26 @@ abstract class BlobStore {
   Future<void> deleteWhere(String prefix);
 }
 
+/// 保存先の空き容量が尽きて書き込めなかったことを表す例外。
+///
+/// WHY(専用の型にするか): ブラウザでは保存領域の上限がオリジン単位で課され、
+/// 上限に達すると以後の書き込みがすべて失敗する。原因が容量であることは
+/// 利用者にしか対処できない（不要な記録を消す・バックアップを書き出す）ため、
+/// 汎用の失敗と区別して「容量が足りない」と伝えられる必要がある。
+///
+/// WHY(呼び出し側で握り潰さないか): 書き込みが失敗したまま「保存しました」と
+/// 出してはいけない。原画像と記録の両方が失われる経路なので、呼び出し側は
+/// 必ず失敗として扱うこと。
+class BlobStoreQuotaException implements Exception {
+  const BlobStoreQuotaException(this.message);
+
+  /// 利用者向けの説明（原因と対処）。
+  final String message;
+
+  @override
+  String toString() => 'BlobStoreQuotaException: $message';
+}
+
 /// メモリ上の [BlobStore] 実装。テスト用。
 class MemoryBlobStore implements BlobStore {
   final Map<String, Uint8List> _store = {};

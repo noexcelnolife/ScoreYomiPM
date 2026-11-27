@@ -1,4 +1,4 @@
-// 最小UIフローの smoke test。
+// 最小UIフローのビルド検証テスト。
 //
 // ホーム画面が表示され、プレーシェア画像選択ボタンが存在することを検証する。
 // OCR 実行部分は platform channel 依存（ML Kit / image_picker）のため、
@@ -12,6 +12,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:scoreyomipm/main.dart';
 import 'package:scoreyomipm/models/ocr_models.dart';
 import 'package:scoreyomipm/ocr/ocr_engine.dart';
+import 'package:scoreyomipm/platform/platform_capabilities.dart';
 import 'package:scoreyomipm/songdb/song_database_service.dart';
 import 'package:scoreyomipm/ui/sharing_intent_receiver.dart';
 
@@ -20,7 +21,7 @@ import 'root_bundle_warmup.dart';
 
 /// テスト用の空実装エンジン（DIP 注入の確認も兼ねる）。
 ///
-/// smoke test では OCR を実行しないため、全メソッドは未実装のままでよい。
+/// ビルド検証テストでは OCR を実行しないため、全メソッドは未実装のままでよい。
 class _FakeOcrEngine implements OcrEngine {
   @override
   Future<OcrPageResult> recognize(Uint8List encodedImageBytes) => throw UnimplementedError();
@@ -77,6 +78,7 @@ void main() {
   testWidgets('ホーム画面にプレーシェア画像選択ボタンが表示される', (WidgetTester tester) async {
     await tester.pumpWidget(
       ScoremanApp(
+        capabilities: const LocalCapabilities(),
         ocrEngine: _FakeOcrEngine(),
         songDatabaseService: _FakeSongDatabaseService(),
         playRecordRepository: FakePlayRecordRepository(),

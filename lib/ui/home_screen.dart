@@ -22,6 +22,7 @@ import '../ocr/pipeline.dart';
 import '../ocr/song_entry.dart';
 import '../ocr/song_repository.dart';
 import '../ocr/song_title_matcher.dart';
+import '../platform/platform_capabilities.dart';
 import '../songdb/song_database_service.dart';
 import 'backup_screen.dart';
 import 'capture_screen.dart';
@@ -52,6 +53,7 @@ class HomeScreen extends StatefulWidget {
     required this.playRecordRepository,
     this.imagePicker,
     this.imagePickerFactory = ImagePicker.new,
+    this.capabilities = const LocalCapabilities(),
     this.mainSongRepository,
     this.additionalSongRepository,
     this.sharingIntentReceiver,
@@ -70,6 +72,14 @@ class HomeScreen extends StatefulWidget {
 
   /// FR-4: テストで差し替える画像ピッカー（null ならファクトリで既定実装を生成）。
   final ImagePicker? imagePicker;
+
+  /// この環境で可能な操作（撮影・共有インテント受信・辞書更新）。
+  ///
+  /// WHY(既定を全機能有効にするか): 既定は端末アプリの挙動であり、ブラウザ版は
+  /// `main` から明示的に差し替える。既定を「何もできない」にすると、注入を忘れた
+  /// 組み立てが静かに機能を失う。逆に既定を端末相当にしておけば、注入漏れは
+  /// 「ブラウザで撮影ボタンが出る」という目に見える形で表面化する。
+  final PlatformCapabilities capabilities;
 
   /// 未注入（null）時に既定実装を生成するファクトリ。既定は本物の ImagePicker。
   ///
@@ -312,6 +322,11 @@ class _HomeScreenState extends State<HomeScreen> {
     _refreshRecentRecords();
     final SharingIntentReceiver? receiver = widget.sharingIntentReceiver;
     if (receiver == null) return;
+
+    // WHY(能力で購読を囲むか): ブラウザには共有インテントの受け口が無く、
+    // 購読を張るとプラグイン未実装の例外でホーム画面の構築ごと失敗する。
+    // 受信できる環境でだけ冷起動チェックと購読を行う。
+    if (!widget.capabilities.canReceiveShareIntent) return;
 
     // 冷起動：起動直後に初期インテントをチェック
     receiver.getInitialImagePath().then((String? path) {
@@ -902,6 +917,13 @@ class _HomeScreenState extends State<HomeScreen> {
   /// WHY: 実利用では毎回操作しないため既定は閉じて画面ノイズを減らす。
   /// 展開時のみ SongDbSection（ヘッダ無し）を表示する。
   Widget _buildSongDbSection() {
+    // WHY(能力が無い環境では節ごと出さないか): 辞書の配信更新・追加取り込みは
+    // 端末のファイルを差し替える操作で、ブラウザには該当する保存先が無い。
+    // 押すと必ず失敗する入口を残すより、節そのものを出さない方が誤解が少ない。
+    // 曲名のサジェストは同梱シードで動くため、この節を隠しても検索は成立する。
+    if (!widget.capabilities.canUpdateSongDatabase) {
+      return const SizedBox.shrink();
+    }
     return ExpansionTile(
       title: const Text('収録曲辞書'),
       // WHY(案A): 折りたたみ中でも辞書の規模が分かるよう、サジェスト対象の
@@ -942,6 +964,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// 画像未選択時の案内表示。
   Widget _buildIdleIntro(ThemeData theme) {
+    // WHY(画像を扱えない環境で文言を差し替えるか): 「リザルト画面を選択して
+    // OCR で読み取る」は、その手段が無い環境では実行できない指示になる。
+    // 代わりに、実際に使える導線（手入力・バックアップ復元）を案内する。
+    if (!widget.capabilities.canCaptureImages) {
+      return Column(
+        children: <Widget>[
+          Icon(Icons.edit_note, size: 72, color: theme.colorScheme.primary),
+          const SizedBox(height: 16),
+          Text(
+            'ブラウザ版は画像からの読み取りに対応していません。'
+            '記録は手入力か、バックアップの復元で追加してください',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyLarge,
+          ),
+          const SizedBox(height: 24),
+        ],
+      );
+    }
     return Column(
       children: <Widget>[
         Icon(Icons.image_outlined, size: 72, color: theme.colorScheme.primary),
@@ -970,6 +1010,21 @@ class _HomeScreenState extends State<HomeScreen> {
           Center(child: CircularProgressIndicator()),
           SizedBox(height: 16),
           Center(child: Text('OCRを実行中…')),
+        ],
+      );
+    }
+    // WHY(画像を取り込めない環境でボタンを差し替えるか): 撮影・ギャラリー
+    // 取り込みは OCR が前提で、その手段が無い環境では押しても必ず失敗する。
+    // ただし手入力の入口は必要なので、ボタン自体は残し、行き先だけを
+    // 種別選択シートではなく手入力画面へ変える（押せないボタンを残さない）。
+    if (!widget.capabilities.canCaptureImages) {
+      return Column(
+        children: <Widget>[
+          FilledButton.icon(
+            onPressed: () => _openManualEntry(null),
+            icon: const Icon(Icons.edit_note),
+            label: const Text('記録を追加'),
+          ),
         ],
       );
     }

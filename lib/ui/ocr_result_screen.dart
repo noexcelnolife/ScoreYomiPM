@@ -10,6 +10,7 @@ import '../models/ocr_models.dart';
 import '../ocr/field_extractor.dart';
 import '../ocr/song_entry.dart';
 import '../ocr/song_title_matcher.dart';
+import '../platform/blob_store.dart';
 import '../validation/play_record_validator.dart';
 import '../validation/validation_issue.dart';
 import 'difficulty_color.dart';
@@ -947,6 +948,16 @@ class _OcrResultScreenState extends State<OcrResultScreen> {
           ?.showSnackBar(const SnackBar(content: Text('スコアを保存しました。')));
       // WHY: maybePop — 画面が直接 root に置かれた場合（テスト等）も安全に。
       Navigator.of(context).maybePop();
+    } on BlobStoreQuotaException catch (error) {
+      // WHY(別扱いにするか): 空き容量切れは利用者だけが解消できる唯一の失敗で、
+      // 対処（バックアップの書き出し・不要な記録の削除）を促す必要がある。
+      // 汎用の「保存に失敗しました」では、何をすればよいか分からない。
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(SnackBar(content: Text(error.message)));
     } on Exception catch (error) {
       if (!mounted) {
         return;

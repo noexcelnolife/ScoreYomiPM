@@ -66,6 +66,7 @@ dependencies:
   # dart:html は非推奨で flutter analyze が警告を出すため package:web を使う。
   # web は Flutter の推移的依存として解決済み（lockfile の区分が変わるだけ）。
   web: ^1.1.2
+  idb_shim: ^2.11.3
 
 dev_dependencies:
   flutter_test:
