@@ -13,6 +13,7 @@ analyzer:
   exclude:
     - build/**
     - android/**
+    - web/**
   language:
     # WHY: コーディング規約 第9章「Dart / Flutter への翻訳方針」の
     # 「dynamic 原則禁止」「境界での外部データ検証」を、人の目ではなく

@@ -1,173 +1,62 @@
-# Web 移行基準線レポート (web-migration-baseline.md)
+# Web ビルド基準線（実測）
 
-## 作業概要
-- 作業場所: `C:\Users\ka\Documents\coding\ScoreYomiPM\wt\feature-web` (branch: feature/web)
-- 作業日: 2026-11-25
-- Flutter: 3.50.1 stable (`C:\dev\flutter\bin\flutter.bat`)
-- Android SDK: build-tools 36.0.0
+測定: リーダー（2026-11-25, branch `feature/web` @ `57936b0` 時点）
+初版（`e19b265` に同梱）は**測定値が事実と異なっていた**ため、リーダーが実測で置き換えた。
 
----
+## 0. 最重要の結論
 
-## 1. flutter create --platforms=web .
+**`flutter build web` が成功することは、Web で動くことを意味しない。**
 
-**実行コマンド:**
-```
-flutter create --platforms=web .
-```
+- `dart:io` は Web でも **コンパイルできる**（Dart の Web コンパイラは未対応ライブラリのスタブを持ち、呼び出しは実行時に `UnsupportedError` を投げる）。
+- したがって「`dart:io` を import しているからビルドが落ちる」という前提は誤り。落ちるのは**実行時**。
+- 実測: ビルドは成功し、成果物をブラウザで開くと **白画面 + `Uncaught Error`**（`main.dart.js` の起動時点）。
 
-**終了コード:** `0`
+**Web 可否のゲートは「ブラウザで起動して例外が出ないこと」で判定する。ビルド成否では判定できない。**
 
-**結果:** 成功。`web/` ディレクトリが生成された。
-- `web\favicon.png`
-- `web\icons\Icon-192.png`
-- `web\icons\Icon-512.png`
-- `web\icons\Icon-maskable-192.png`
-- `web\icons\Icon-maskable-512.png`
-- `web\index.html`
-- `web\manifest.json`
+## 1. 環境
 
-**副作用 (既存ファイル変更):**
-- `.metadata` (変更)
-- `analysis_options.yaml` (変更: build/platform ディレクトリ除外追加)
-→ これらは意図しない変更として `git checkout --` で元に戻した。
+| 項目 | 値 |
+|---|---|
+| 作業場所 | `C:\Users\ka\Documents\coding\ScoreYomiPM\wt\feature-web`（worktree, branch `feature/web`） |
+| Flutter | `C:\dev\flutter\bin\flutter.bat`（PATH 外） |
+| 配信 | `python -m http.server 8123 --directory build\web` |
+| 確認ブラウザ | Chrome（DevTools 経由で console を取得） |
 
----
+## 2. 実測値
 
-## 2. flutter build web --release
+| 検証 | コマンド | 結果 |
+|---|---|---|
+| 静的解析 | `flutter analyze` | **No issues found!** |
+| テスト | `flutter test` | **844 passed / 22 skipped / 3 failed**（失敗理由は下記 §4） |
+| Web ビルド | `flutter build web --release` | **成功（exit 0, 約 49 秒）** |
+| **実行** | 成果物をブラウザで開く | **白画面。console に `Uncaught Error`（起動時）** |
+| 成果物サイズ | `build\web` 合計 | 51.0 MB / 59 ファイル |
 
-**実行コマンド:**
-```
-flutter build web --release
-```
+## 3. 成果物サイズの内訳（上位）
 
-**終了コード:** `0`
+| サイズ | ファイル | 備考 |
+|---|---|---|
+| 大きい | `canvaskit/*` の複数バリアント | ビルドに全レンダラ分が入る。配信時に使うのは 1 つ |
+| 8.9 MB | BIZ UDPGothic（Regular/Bold） | **日本語フォントが実質の初期ダウンロード支配要因** |
+| 4.2 MB | `main.dart.js` | — |
+| — | `assets/anchors/**` | 位置合わせ用の画像群 |
 
-**結果:** 成功。エラー件数 0。
-- 出力: `build\web`
-- Wasm dry run 警告あり (致命的ではない)
+Tier A では削らない。フォントのサブセット化は公開判断のときの課題として記録する。
 
-**失敗ファイル一覧:** なし (0 件)
+## 4. テスト 3 件の失敗は Web と無関係（レガシー欠陥）
 
----
+`song_dictionary_test.dart` の 3 件は `docs/ground_truth_template.csv` を読む。
+`.gitignore` が `/docs/*` を除外し `/docs/media/` だけ追跡しているため、**クリーンな clone / worktree には CSV が存在しない**。
 
-## 3. flutter analyze (基準線)
+- 対処: worktree へ `app\docs\ground_truth_template.csv` をコピー（未追跡）→ 3 件とも成功、**847 件全緑**。
+- 恒久対処（別件）: テスト用の固定データは `test/fixtures/` に置く。`docs/` は社内資料なのでテストが依存してはならない。
 
-**実行コマンド:**
-```
-flutter analyze
-```
+## 5. これからのゲート
 
-**終了コード:** `1`
+1. `flutter analyze` → No issues found
+2. `flutter test` → 全緑（worktree では §4 の CSV をコピー済みであること）
+3. `flutter build web --release` → 成功
+4. **`build\web` を配信してブラウザで開き、console エラー 0 件・ホーム画面が描画される**
+5. `flutter build apk --debug` → 成功（Android 版の退行なし）
 
-**結果:** 104 issues found
-
-**エラー詳細 (原因ファイル別):**
-
-### lib\platform\blob_store.dart (dart:io 依存エラー, 22 errors)
-`dart:io` の `File`, `Directory`, `Uint8List`, `Platform` は Web プラットフォームでは利用不可。
-
-| 行 | エラー種別 | 内容 |
-|----|-----------|------|
-| 8:10 | non_type_as_type_argument | `Uint8List` は型として使用不可 |
-| 11:34 | undefined_class | `Uint8List` 未定義 |
-| 32:9 | undefined_class | `Directory` 未定義 |
-| 37:10 | non_type_as_type_argument | `Uint8List` |
-| 39:18 | undefined_method | `File` メソッド未定義 |
-| 45:34 | undefined_class | `Uint8List` |
-| 47:18 | undefined_method | `File` |
-| 55:18 | undefined_method | `File` |
-| 62:18 | undefined_method | `File` |
-| 69:17 | undefined_method | `Directory` |
-| 72:20 | undefined_method | `File` |
-| 78:21 | type_test_with_undefined_name | `File` は定義されていない型 |
-| 90:17 | undefined_method | `Directory` |
-| 95:18 | undefined_method | `File` |
-| 100:59 | undefined_identifier | `Platform` |
-| 103:53 | undefined_identifier | `Platform` |
-| 111:24 | undefined_identifier | `Platform` |
-| 112:10 | undefined_identifier | `Platform` |
-| 126:21 | non_type_as_type_argument | `Uint8List` |
-| 129:10 | non_type_as_type_argument | `Uint8List` |
-| 132:34 | undefined_class | `Uint8List` |
-| 133:19 | undefined_identifier | `Uint8List` |
-
-### test\blob_store_test.dart (package:test 未定義, 82 errors)
-`package:test` が `pubspec.yaml` の依存関係にないため、テスト用関数・クラスがすべて未定義。
-
-| エラー種別 | 件数 | 代表例 |
-|-----------|------|--------|
-| uri_does_not_exist | 1 | `package:test/test.dart` |
-| undefined_function | 多数 | `group`, `setUp`, `test`, `expect`, `equals`, `throwsA`, `isA` |
-| undefined_identifier | 多数 | `isNull`, `isTrue`, `isFalse` |
-| depend_on_referenced_packages | 1 | `test` パッケージが依存関係にない |
-
----
-
-## 4. flutter test (基準線)
-
-**実行コマンド:**
-```
-flutter test
-```
-
-**終了コード:** `1`
-
-**結果:** pass: 839 / skipped: 22 / failed: 8
-
-**失敗テスト (8 件):**
-すべて `test\blob_store_test.dart` の `IoBlobStore` クラスに関するテスト。
-
-| テスト名 | エラー |
-|---------|--------|
-| IoBlobStore 書き込み後の読み取り（往復） | PathNotFoundException: Cannot open file... (OS Error: ファイル名、ディレクトリ名、またはボリューム ラベルの構文が間違っています。, errno = 123) |
-| IoBlobStore exists は存在時 true、不在時 false | 同上 |
-| IoBlobStore listKeys は prefix でフィルタし昇順にソートする | 同上 |
-| IoBlobStore delete でエントリを削除できる | 同上 |
-| IoBlobStore deleteWhere は prefix 一致をすべて削除する | 同上 |
-| ... and 3 more | 同上 |
-
-**原因:** `lib\platform\blob_store.dart` が `dart:io` (`File`, `Directory`) を使用しており、Web プラットフォームでは `dart:io` が利用不可。一時ディレクトリパスの生成に `Platform` を使用している箇所も問題。
-
----
-
-## 5. 原因カテゴリ集計
-
-| カテゴリ | 件数 | 対象ファイル |
-|---------|------|-------------|
-| dart:io 未対応 (Web 非対応) | 22 | `lib\platform\blob_store.dart` |
-| package:test 未依存 | 82 | `test\blob_store_test.dart` |
-| テスト実行失敗 (dart:io 実行時エラー) | 8 | `test\blob_store_test.dart` |
-| **合計** | **112** | |
-
----
-
-## 6. 修正方針 (今後の作業)
-
-1. `lib\platform\blob_store.dart` を Web 対応にする:
-   - `dart:io` を `dart:html` / `indexed_db` / `shared_preferences_web` などに置き換え
-   - または `kIsWeb` で分岐し、Web では代替実装を使用
-
-2. `test\blob_store_test.dart` を Web 対応にする:
-   - `package:test` を `pubspec.yaml` の `dev_dependencies` に追加
-   - または Web ではテストをスキップする処理を追加
-
----
-
-## 7. web/index.html 修正
-
-- `<title>scoreyomipm</title>` → `<title>スコアヨミPM</title>`
-- `<meta name="description" content="A new Flutter project.">` → `<meta name="description" content="スコアヨミPM">`
-
----
-
-## コミット対象
-
-- `web/` (Web プラットフォーム生成物)
-- `lib/platform/` (既存ソース、Web 非対応部分を含む)
-- `test/blob_store_test.dart` (既存テスト)
-- `reports/` (本レポート)
-
-**コミットしないもの:**
-- `.metadata` (戻した)
-- `analysis_options.yaml` (戻した)
-- `build/` (.gitignore 対象)
+4 が満たせるまでは「Web 対応済み」と報告しない。
