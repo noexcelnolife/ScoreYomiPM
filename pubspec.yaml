@@ -62,6 +62,10 @@ dependencies:
   # 記録詳細の「共有」: 端末の共有シートを開く（13 系は
   # SharePlus.instance.share(ShareParams(...)) に統一されている）
   share_plus: ^13.3.1
+  # Web ビルドのブラウザ API（Blob / Anchor によるダウンロード）。
+  # dart:html は非推奨で flutter analyze が警告を出すため package:web を使う。
+  # web は Flutter の推移的依存として解決済み（lockfile の区分が変わるだけ）。
+  web: ^1.1.2
 
 dev_dependencies:
   flutter_test:

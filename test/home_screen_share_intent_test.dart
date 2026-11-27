@@ -10,6 +10,7 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 // WHY: この環境の Flutter では package:flutter/material.dart が非推奨で
 // material_ui が正規導入（既存テスト・lib 側の import 規約に合わせる）。
@@ -31,7 +32,7 @@ import 'test_image_helper.dart';
 import 'root_bundle_warmup.dart';
 
 /// 必ず OcrEngineException を投げる OCR エンジン（home_screen_test.dart と同形）。
-Future<OcrPageResult> _throwOnRecognize(File imageFile) async =>
+Future<OcrPageResult> _throwOnRecognize(Uint8List encodedImageBytes) async =>
     throw const OcrEngineException('テスト用OCR失敗');
 
 class _FakeSongDatabaseService implements SongDatabaseService {
@@ -120,8 +121,10 @@ void main() {
     // WHY: initState の getInitialImagePath() は Future で解決するため、
     // まず 1 フレーム進めてマイクロタスクを流し、その後遷移アニメーションを
     // settle させる（OCR 成功テストと同じ pump 順）。
+    // WHY(実 I/O を回すか): OCR 経路は原画像の readAsBytes を伴う。FakeAsync の
+    // 下では完了しないため、実時間を進めて遷移まで到達させる。
     await tester.pump();
-    await tester.pumpAndSettle();
+    await pumpThroughRealIo(tester);
 
     expect(find.byType(OcrResultScreen), findsOneWidget);
   });
@@ -150,8 +153,10 @@ void main() {
 
     // 温起動: アプリがメモリ上にある状態で共有された画像がストリームへ流れる。
     receiver.streamController.add(successImage.path);
+    // WHY(実 I/O を回すか): OCR 経路は原画像の readAsBytes を伴う。FakeAsync の
+    // 下では完了しないため、実時間を進めて遷移まで到達させる。
     await tester.pump();
-    await tester.pumpAndSettle();
+    await pumpThroughRealIo(tester);
 
     expect(find.byType(OcrResultScreen), findsOneWidget);
   });

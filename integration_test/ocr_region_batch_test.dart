@@ -111,9 +111,13 @@ List<File> _collectImages() {
 Future<String> _measureOne(MlKitOcrEngine engine, File imageFile) async {
   final fileName = imageFile.uri.pathSegments.last;
   try {
-    final page = await engine.recognize(imageFile);
+    // WHY(バイト列で渡すか): OcrEngine と RegionOcrRunner の入力契約は
+    // バイト列に統一した。ファイル名は結果の識別子としてのみ使う。
+    // 読み出しは 1 回だけにして、全体 OCR と領域 OCR に同じ画素を渡す。
+    final imageBytes = await imageFile.readAsBytes();
+    final page = await engine.recognize(imageBytes);
     final runner = RegionOcrRunner(engine: engine);
-    final regionOcr = await runner.run(page, imageFile);
+    final regionOcr = await runner.run(page, imageBytes);
     return jsonEncode(_toJson(page, regionOcr, fileName));
   } catch (error) {
     return jsonEncode({'file': fileName, 'error': error.toString()});

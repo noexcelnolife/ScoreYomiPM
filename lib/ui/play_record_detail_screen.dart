@@ -656,17 +656,31 @@ class _PlayRecordDetailScreenState extends State<PlayRecordDetailScreen> {
         mainSongRepository: widget.mainSongRepository,
         additionalSongRepository: widget.additionalSongRepository,
       );
-      final OcrPipelineContext pipelineContext = await pipeline.run(
-        File(record.resultImagePath),
-      );
+      // WHY(リポジトリ経由で読み直すか): 保存済みレコードの resultImagePath は
+      // 保存先からの相対キー（v1.0.3 以前の絶対パスは読み込み時に basename へ
+      // 正規化される）。`File(record.resultImagePath)` で開くと、実体の置き場が
+      // ディスクから IndexedDB へ変わった後は必ず失敗する。実体の解決は
+      // リポジトリに任せ、OCR パイプラインの入口（ファイル）へは一時ファイルとして
+      // 渡す。
+      final Uint8List? sourceBytes = record.resultImagePath.isEmpty
+          ? null
+          : await widget.playRecordRepository.readImage(record.resultImagePath);
+      if (sourceBytes == null || sourceBytes.isEmpty) {
+        throw StateError('原画像が見つかりません（写真なしレコード）');
+      }
+      final File sourceFile = await _materializeSourceFile(sourceBytes);
+      final OcrPipelineContext pipelineContext;
+      try {
+        pipelineContext = await pipeline.run(sourceFile);
+      } finally {
+        await _deleteQuietly(sourceFile);
+      }
       if (!mounted) {
         return;
       }
       await Navigator.of(context).push(
         OcrResultScreen.route(
-          imageBytes: record.resultImagePath.isEmpty
-            ? null
-            : await widget.playRecordRepository.readImage(record.resultImagePath),
+          imageBytes: sourceBytes,
           pageResult: pipelineContext.pageResult,
           extractionResult: pipelineContext.extractionResult,
           songMatchResult: pipelineContext.songMatchResult,
@@ -697,6 +711,32 @@ class _PlayRecordDetailScreenState extends State<PlayRecordDetailScreen> {
     }
     if (mounted) {
       await _reload();
+    }
+  }
+
+  /// 原画像のバイト列を一時ファイルとして書き出す。
+  ///
+  /// WHY(一時ファイルを経由するか): OCR パイプラインの入口はファイルで、
+  /// 前処理・傾き補正・アンカー検出がそれぞれ実ファイルを要求する。保存先が
+  /// ディスクから IndexedDB へ変わっても、この境界だけは端末の一時領域で満たす。
+  static Future<File> _materializeSourceFile(Uint8List bytes) async {
+    final Directory dir = await Directory.systemTemp.createTemp(
+      'scoreyomipm_rerun_ocr',
+    );
+    final File file = File('${dir.path}${Platform.pathSeparator}source.img');
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
+  }
+
+  /// 一時ファイルとその親ディレクトリを片付ける（失敗しても本処理は止めない）。
+  static Future<void> _deleteQuietly(File file) async {
+    try {
+      await file.delete();
+      await file.parent.delete();
+    } on FileSystemException catch (error) {
+      // WHY(握りつぶすか): 一時領域の掃除失敗は再 OCR の成否に影響しない。
+      // 失敗を投げると、認識は成功しているのに画面が失敗表示になる。
+      developer.log('一時ファイルの削除に失敗: $error', name: 'PlayRecordDetail');
     }
   }
 

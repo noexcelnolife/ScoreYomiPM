@@ -1,5 +1,6 @@
 // Lively 経路（統合 4 パス）の単体テスト。
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -129,6 +130,9 @@ void main() {
 
   late Directory tempDir;
   late File photoFile;
+  // WHY(バイト列も持つか): LivelyOcrRoute.run の入力がバイト列になったため。
+  // 画像を生成している都合で一時ファイルも残すが、経路にはバイト列を渡す。
+  late Uint8List photoBytes;
 
   setUp(() {
     tempDir = Directory.systemTemp.createTempSync('lively_route_test_');
@@ -136,6 +140,7 @@ void main() {
     final photo = img.Image(width: 1000, height: 800, numChannels: 3);
     img.fill(photo, color: img.ColorRgb8(30, 30, 30));
     photoFile.writeAsBytesSync(img.encodeJpg(photo, quality: 90));
+    photoBytes = photoFile.readAsBytesSync();
   });
 
   tearDown(() {
@@ -153,7 +158,7 @@ void main() {
     ];
     var calls = 0;
     final engine = FakeOcrEngine(
-      onRecognize: (File file) async {
+      onRecognize: (Uint8List bytes) async {
         final result = responses[calls.clamp(0, responses.length - 1)];
         calls++;
         return result;
@@ -165,7 +170,7 @@ void main() {
     );
 
     final outcome = await route.run(
-      imageFile: photoFile,
+      imageBytes: photoBytes,
       pageResult: _pageResultWithLabels(),
     );
 
@@ -183,7 +188,7 @@ void main() {
   test('パネルのラベルが無ければ抽出を諦める', () async {
     var calls = 0;
     final engine = FakeOcrEngine(
-      onRecognize: (File file) async {
+      onRecognize: (Uint8List bytes) async {
         calls++;
         return panelPass();
       },
@@ -194,7 +199,7 @@ void main() {
     );
 
     final outcome = await route.run(
-      imageFile: photoFile,
+      imageBytes: photoBytes,
       pageResult: OcrPageResult(
         elements: <OcrElement>[
           _text('12345', const Rect.fromLTRB(0, 0, 50, 20)),
@@ -213,7 +218,7 @@ void main() {
   test('基準点が取れないパネル応答なら抽出しない（誤値を登録しない）', () async {
     var calls = 0;
     final engine = FakeOcrEngine(
-      onRecognize: (File file) async {
+      onRecognize: (Uint8List bytes) async {
         calls++;
         // ラベルが読めず数値だけが返るパネル（GREAT が無い）。
         return OcrPageResult(
@@ -234,7 +239,7 @@ void main() {
 
     // ラベルはあるが GREAT が無い写真（パネル応答も数値だけ）。
     final outcome = await route.run(
-      imageFile: photoFile,
+      imageBytes: photoBytes,
       pageResult: _pageResultWithoutGreat(),
     );
 
@@ -245,7 +250,7 @@ void main() {
   test('曲名帯はパネル上方の要素から作る', () async {
     var calls = 0;
     final engine = FakeOcrEngine(
-      onRecognize: (File file) async {
+      onRecognize: (Uint8List bytes) async {
         final responses = <OcrPageResult>[
           panelPass(),
           countersPass(),
@@ -263,7 +268,7 @@ void main() {
     );
 
     final outcome = await route.run(
-      imageFile: photoFile,
+      imageBytes: photoBytes,
       pageResult: _pageResultWithLabels(),
     );
 

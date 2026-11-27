@@ -4,7 +4,7 @@
 // OCR 実行部分は platform channel 依存（ML Kit / image_picker）のため、
 // このテストでは対象外とする。
 
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -23,11 +23,11 @@ import 'root_bundle_warmup.dart';
 /// smoke test では OCR を実行しないため、全メソッドは未実装のままでよい。
 class _FakeOcrEngine implements OcrEngine {
   @override
-  Future<OcrPageResult> recognize(File imageFile) => throw UnimplementedError();
+  Future<OcrPageResult> recognize(Uint8List encodedImageBytes) => throw UnimplementedError();
 
   @override
   Future<OcrPageResult> recognizeRegion(
-    File imageFile,
+    Uint8List encodedImageBytes,
     Rect region, {
     required OcrScript script,
     double pixelScale = 1.0,

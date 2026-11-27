@@ -47,6 +47,9 @@ class MlKitOcrEngine implements OcrEngine {
   final Map<MlKitScript, TextRecognizer> _recognizers = {};
   bool _disposed = false;
 
+  /// 一時ファイル名の衝突を避けるための連番。
+  int _tempSeq = 0;
+
   MlKitOcrEngine({this.defaultScript = MlKitScript.japanese});
 
   /// [script] を明示して認識を実行する。
@@ -83,13 +86,59 @@ class MlKitOcrEngine implements OcrEngine {
     }
   }
 
+  /// WHY(バイト列を受けて一時ファイルへ書くか): [OcrEngine] の契約は
+  /// プラットフォーム非依存のバイト列入力になった（保存先が端末のディスクでも
+  /// ブラウザの IndexedDB でも同じ経路を通すため）。一方、ML Kit への画素の
+  /// 渡し方は `InputImage.fromFilePath` のまま据え置く。この経路は回転・
+  /// バイト整列の実績があり、`fromBytes` を避ける決定が既にされている
+  ///（本ファイル下部の一時 PNG 経由の WHY、および
+  /// docs/st5_f2_g_contrast_preprocess_design_confirmation_2026-11-22.md）。
+  /// 変えるのは「入力の受け渡し」だけで、認識の品質に関わる部分は変えない。
   @override
-  Future<OcrPageResult> recognize(File imageFile) {
-    return recognizeWithScript(imageFile, defaultScript);
+  Future<OcrPageResult> recognize(Uint8List encodedImageBytes) {
+    return _withTempSource(
+      encodedImageBytes,
+      (File source) => recognizeWithScript(source, defaultScript),
+    );
   }
 
   @override
   Future<OcrPageResult> recognizeRegion(
+    Uint8List encodedImageBytes,
+    ui.Rect region, {
+    required OcrScript script,
+    double pixelScale = 1.0,
+    bool contrastRetry = false,
+  }) {
+    return _withTempSource(
+      encodedImageBytes,
+      (File source) async {
+        try {
+          return await _recognizeRegionFromFile(
+            source,
+            region,
+            script: script,
+            pixelScale: pixelScale,
+            contrastRetry: contrastRetry,
+          );
+        } on OcrEngineException {
+          rethrow;
+        } on Exception catch (error) {
+          // WHY(包むか): [OcrEngine] の契約は「失敗は OcrEngineException」。
+          // 呼び出し側はそれだけを捕まえて未確定レコード保存に倒すため、
+          // 素の例外を漏らすと復旧経路に入らず記録が失われる。
+          throw OcrEngineException('ML Kit region recognition failed: $error');
+        }
+      },
+    );
+  }
+
+  /// クロップ再認識の本体（旧 `recognizeRegion` の実装）。
+  ///
+  /// WHY(File のまま残すか): クロップは元画像をデコードして描画する必要があり、
+  /// ML Kit へ渡すのもファイル経路である。バイト列化するのは公開境界だけで
+  /// 十分（KISS）。呼び出し元は [recognizeRegion] のみ。
+  Future<OcrPageResult> _recognizeRegionFromFile(
     File imageFile,
     ui.Rect region, {
     required OcrScript script,
@@ -105,7 +154,7 @@ class MlKitOcrEngine implements OcrEngine {
     final cropped = await _crop(imageFile, region, pixelScale);
     final tempDir = await Directory.systemTemp.createTemp('scoreyomipm_ocr');
     try {
-      final tempFile = await _writeTempPng(cropped, tempDir, imageFile);
+      final tempFile = await _writeTempPng(cropped, tempDir);
       final firstStopwatch = Stopwatch()..start();
       final first = await recognizeWithScript(tempFile, _toMlKitScript(script));
       firstStopwatch.stop();
@@ -121,7 +170,6 @@ class MlKitOcrEngine implements OcrEngine {
       final retried = await _retryWithContrast(
         cropped,
         tempDir,
-        imageFile,
         script,
         first,
         firstStopwatch.elapsed,
@@ -158,7 +206,6 @@ class MlKitOcrEngine implements OcrEngine {
   Future<OcrPageResult?> _retryWithContrast(
     ui.Image cropped,
     Directory tempDir,
-    File sourceFile,
     OcrScript script,
     OcrPageResult firstResult,
     Duration firstDuration,
@@ -188,7 +235,7 @@ class MlKitOcrEngine implements OcrEngine {
       cropped.height,
     );
     try {
-      final tempFile = await _writeTempPng(retryImage, tempDir, sourceFile);
+      final tempFile = await _writeTempPng(retryImage, tempDir);
       final retryStopwatch = Stopwatch()..start();
       final second = await recognizeWithScript(
         tempFile,
@@ -308,21 +355,66 @@ class MlKitOcrEngine implements OcrEngine {
     }
   }
 
-  /// [image] を PNG エンコードして [tempDir] 下の一時ファイルへ書き出す。
+  /// 一時ソースファイルを作って [body] に渡し、終わったら必ず消す。
   ///
-  /// ファイル名に元画像名を含める（認識ログでの追跡性のため）。
-  Future<File> _writeTempPng(
-    ui.Image image,
-    Directory tempDir,
-    File sourceFile,
+  /// WHY(毎回作って消すか): 認識は同時に 1 件しか走らず（1 記録 = 1 画像）、
+  /// 使い回すと前の画像が残って容量を食う。消し漏れより作り直しの方が安い。
+  Future<T> _withTempSource<T>(
+    Uint8List encodedImageBytes,
+    Future<T> Function(File source) body,
   ) async {
+    // WHY(dispose 判定を先に置くか): 一時ファイルの書き出しは副作用（ディスク
+    // 占有）なので、破棄済みエンジンには起こさせない。どの失敗より先に弾く。
+    if (_disposed) {
+      throw StateError('MlKitOcrEngine has already been disposed.');
+    }
+    if (encodedImageBytes.isEmpty) {
+      throw OcrEngineException('Empty image bytes passed to ML Kit engine.');
+    }
+    final File source = await _writeTempSource(encodedImageBytes);
+    try {
+      return await body(source);
+    } finally {
+      await _deleteQuietly(source);
+    }
+  }
+
+  /// 認識対象のバイト列を一時ファイルへ書く。
+  ///
+  /// WHY(拡張子を付けないか): ML Kit はファイル内容で形式を判定するため、
+  /// 拡張子は認識結果に影響しない。付け間違えた名前を残すと、
+  /// ログを読む人が形式を誤解するので、形式を主張しない名前にする。
+  Future<File> _writeTempSource(Uint8List encodedImageBytes) async {
+    final File file = File(
+      '${Directory.systemTemp.path}/scoreyomipm_ocr_src_${_tempSeq++}.img',
+    );
+    await file.writeAsBytes(encodedImageBytes, flush: true);
+    return file;
+  }
+
+  Future<void> _deleteQuietly(File file) async {
+    try {
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } on FileSystemException catch (error) {
+      // WHY(握りつぶすか): 一時ファイルが残るだけで認識結果は変わらない。
+      // ここで例外を投げると、成功した認識を失敗として扱ってしまう。
+      debugPrint('[ocr] failed to delete temp file: $error');
+    }
+  }
+
+
+  ///
+  /// WHY(元画像名を使わないか): 入力はバイト列になり、元のファイル名が
+  /// 失われた。名前に意味を持たせず連番にして、追跡はログ側の
+  /// リクエスト ID に任せる。
+  Future<File> _writeTempPng(ui.Image image, Directory tempDir) async {
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     if (byteData == null) {
       throw OcrEngineException('Failed to encode cropped image to PNG.');
     }
-    final tempFile = File(
-      '${tempDir.path}/${sourceFile.uri.pathSegments.last}.png',
-    );
+    final tempFile = File('${tempDir.path}/retry_${_tempSeq++}.png');
     await tempFile.writeAsBytes(byteData.buffer.asUint8List());
     return tempFile;
   }

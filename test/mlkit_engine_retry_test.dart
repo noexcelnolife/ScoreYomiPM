@@ -136,7 +136,7 @@ void main() {
       ]);
 
       final result = await engine.recognizeRegion(
-        sourcePng,
+        sourcePng.readAsBytesSync(),
         const Rect.fromLTWH(0, 0, 16, 8),
         script: OcrScript.japanese,
         pixelScale: 1.0,
@@ -157,7 +157,7 @@ void main() {
       ]);
 
       final result = await engine.recognizeRegion(
-        sourcePng,
+        sourcePng.readAsBytesSync(),
         const Rect.fromLTWH(0, 0, 16, 8),
         script: OcrScript.japanese,
         pixelScale: 1.0,
@@ -181,7 +181,7 @@ void main() {
       ]);
 
       final result = await engine.recognizeRegion(
-        sourcePng,
+        sourcePng.readAsBytesSync(),
         const Rect.fromLTWH(0, 0, 16, 8),
         script: OcrScript.latin,
         pixelScale: 1.0,
@@ -204,7 +204,7 @@ void main() {
       ]);
 
       final result = await engine.recognizeRegion(
-        sourcePng,
+        sourcePng.readAsBytesSync(),
         const Rect.fromLTWH(0, 0, 16, 8),
         script: OcrScript.japanese,
         pixelScale: 1.0,
@@ -222,7 +222,7 @@ void main() {
       final engine = _RecordingScriptEngine(<OcrPageResult>[_emptyResult()]);
 
       final result = await engine.recognizeRegion(
-        sourcePng,
+        sourcePng.readAsBytesSync(),
         const Rect.fromLTWH(0, 0, 16, 8),
         script: OcrScript.japanese,
         pixelScale: 1.0,

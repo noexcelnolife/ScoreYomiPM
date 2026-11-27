@@ -9,6 +9,7 @@
 // - 一時ファイル後始末: 補正で作られたファイルは run 完了時に消す。
 //   ただし入力と同じパスが返った場合は削除しない（呼び出し元のファイル保護）。
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -26,8 +27,8 @@ import 'support/image_fixture_skip.dart';
 /// run が完了しない。要素は空でよい（本テストの対象は補正のゲートと後始末）。
 class _SizeAwareFakeEngine implements OcrEngine {
   @override
-  Future<OcrPageResult> recognize(File imageFile) async {
-    final image = img.decodeImage(await imageFile.readAsBytes());
+  Future<OcrPageResult> recognize(Uint8List encodedImageBytes) async {
+    final image = img.decodeImage(encodedImageBytes);
     return OcrPageResult(
       elements: const [],
       fullText: '',
@@ -38,13 +39,13 @@ class _SizeAwareFakeEngine implements OcrEngine {
 
   @override
   Future<OcrPageResult> recognizeRegion(
-    File imageFile,
+    Uint8List encodedImageBytes,
     ui.Rect region, {
     required OcrScript script,
     double pixelScale = 1.0,
     bool contrastRetry = false,
   }) async {
-    final image = img.decodeImage(await imageFile.readAsBytes());
+    final image = img.decodeImage(encodedImageBytes);
     return OcrPageResult(
       elements: const [],
       fullText: '',

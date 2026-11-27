@@ -48,7 +48,8 @@ void main() {
 
 Future<OcrBatchImageResult> _runOcr(MlKitOcrEngine engine, File file) async {
   final sw = Stopwatch()..start();
-  final page = await engine.recognize(file);
+  // WHY(バイト列で渡すか): OcrEngine の入力契約はバイト列に統一した。
+  final page = await engine.recognize(await file.readAsBytes());
   sw.stop();
   return OcrBatchImageResult(
     file: 'rel23bjim.jpg',

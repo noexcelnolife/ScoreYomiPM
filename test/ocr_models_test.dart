@@ -5,7 +5,7 @@
 // では扱わず、抽象インターフェース OcrEngine の fake を注入して
 // パイプラインとの結合を検証する（spec.md §7.3 OCR抽象レイヤー）。
 
-import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -13,6 +13,8 @@ import 'package:scoreyomipm/models/ocr_models.dart';
 import 'package:scoreyomipm/ocr/field_extractor.dart';
 import 'package:scoreyomipm/ocr/ocr_engine.dart';
 import 'package:scoreyomipm/ocr/pipeline.dart';
+
+import 'test_image_helper.dart';
 
 /// recognize / recognizeRegion の呼び出しを記録し、固定結果または例外を
 /// 返す fake エンジン。
@@ -26,7 +28,7 @@ class _FakeOcrEngine implements OcrEngine {
   final Object? exception;
 
   int callCount = 0;
-  File? lastImageFile;
+  Uint8List? lastImageBytes;
 
   /// recognizeRegion の呼び出し記録（Wave 2 の TDD で検証する）。
   // WHY contrastRetry を記録対象に追加（docs/st5_f2_g_contrast_preprocess_
@@ -35,7 +37,7 @@ class _FakeOcrEngine implements OcrEngine {
   // runner 未実装で常に default false を記録する）。
   final List<
     ({
-      File imageFile,
+      Uint8List encodedImageBytes,
       Rect region,
       OcrScript script,
       double pixelScale,
@@ -45,9 +47,9 @@ class _FakeOcrEngine implements OcrEngine {
   regionCalls = [];
 
   @override
-  Future<OcrPageResult> recognize(File imageFile) async {
+  Future<OcrPageResult> recognize(Uint8List encodedImageBytes) async {
     callCount++;
-    lastImageFile = imageFile;
+    lastImageBytes = encodedImageBytes;
     final error = exception;
     if (error != null) {
       throw error;
@@ -57,14 +59,14 @@ class _FakeOcrEngine implements OcrEngine {
 
   @override
   Future<OcrPageResult> recognizeRegion(
-    File imageFile,
+    Uint8List encodedImageBytes,
     Rect region, {
     required OcrScript script,
     double pixelScale = 1.0,
     bool contrastRetry = false,
   }) async {
     regionCalls.add((
-      imageFile: imageFile,
+      encodedImageBytes: encodedImageBytes,
       region: region,
       script: script,
       pixelScale: pixelScale,
@@ -351,12 +353,14 @@ void main() {
       );
       final engine = _FakeOcrEngine(result: pageResult);
       final pipeline = OcrPipeline(engine: engine);
-      final imageFile = File('sample.png');
+      final imageFile = createTestImageFile();
 
       final context = await pipeline.run(imageFile);
 
       expect(engine.callCount, 1);
-      expect(engine.lastImageFile, same(imageFile));
+      // WHY(バイト列を検証するか): エンジンの契約がバイト列入力になったため、
+      // パイプラインが画像バイト列を渡していることだけを見る。
+      expect(engine.lastImageBytes, isNotNull);
       expect(context.pageResult, equals(pageResult));
       expect(context.imageFile, same(imageFile));
       // Step 0 で接続済み（タスク 01a20108）: 寸法つきの結果から
@@ -382,7 +386,7 @@ void main() {
       );
       final pipeline = OcrPipeline(engine: engine);
 
-      final context = await pipeline.run(File('sample.png'));
+      final context = await pipeline.run(createTestImageFile());
 
       expect(context.pageResult, isNotNull);
       expect(context.extractionResult, isNull);
@@ -395,7 +399,7 @@ void main() {
       final pipeline = OcrPipeline(engine: engine);
 
       await expectLater(
-        pipeline.run(File('sample.png')),
+        pipeline.run(createTestImageFile()),
         throwsA(isA<OcrEngineException>()),
       );
     });
@@ -403,7 +407,7 @@ void main() {
 
   group('OcrPipelineContext', () {
     test('imageFile を保持し、pageResult / extractionResult の初期値は null', () {
-      final imageFile = File('sample.png');
+      final imageFile = createTestImageFile();
 
       final context = OcrPipelineContext(imageFile: imageFile);
 
@@ -420,7 +424,7 @@ void main() {
       );
       const updated = OcrPageResult(elements: [element], fullText: 'オルビス');
 
-      final context = OcrPipelineContext(imageFile: File('sample.png'));
+      final context = OcrPipelineContext(imageFile: createTestImageFile());
       context.pageResult = updated;
 
       expect(context.pageResult, equals(updated));

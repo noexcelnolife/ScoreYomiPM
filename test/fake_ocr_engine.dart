@@ -1,6 +1,6 @@
 // OcrEngine のテスト用フェイク。
 
-import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' show Rect;
 
 import 'package:scoreyomipm/models/ocr_models.dart';
@@ -14,7 +14,8 @@ class FakeOcrEngine implements OcrEngine {
   FakeOcrEngine({this.onRecognize, this.onRecognizeRegion});
 
   /// recognize の実装。null の場合は呼ばれた時点でテスト失敗扱い。
-  final Future<OcrPageResult> Function(File imageFile)? onRecognize;
+  final Future<OcrPageResult> Function(Uint8List encodedImageBytes)?
+      onRecognize;
 
   /// recognizeRegion の実装。null の場合は呼ばれた時点でテスト失敗扱い。
   ///
@@ -23,7 +24,7 @@ class FakeOcrEngine implements OcrEngine {
   /// 領域 OCR の曲名帯結果を入力とするため、region 応答を返せないと
   /// matchedSong まで辿れない）。
   final Future<OcrPageResult> Function(
-    File imageFile,
+    Uint8List encodedImageBytes,
     Rect region, {
     required OcrScript script,
     double pixelScale,
@@ -32,25 +33,25 @@ class FakeOcrEngine implements OcrEngine {
   onRecognizeRegion;
 
   @override
-  Future<OcrPageResult> recognize(File imageFile) async {
-    final Future<OcrPageResult> Function(File imageFile)? callback =
-        onRecognize;
+  Future<OcrPageResult> recognize(Uint8List encodedImageBytes) async {
+    final Future<OcrPageResult> Function(Uint8List encodedImageBytes)?
+        callback = onRecognize;
     if (callback == null) {
       throw UnimplementedError('recognize は呼ばれる想定ではありません');
     }
-    return callback(imageFile);
+    return callback(encodedImageBytes);
   }
 
   @override
   Future<OcrPageResult> recognizeRegion(
-    File imageFile,
+    Uint8List encodedImageBytes,
     Rect region, {
     required OcrScript script,
     double pixelScale = 1.0,
     bool contrastRetry = false,
   }) async {
     final Future<OcrPageResult> Function(
-      File imageFile,
+      Uint8List encodedImageBytes,
       Rect region, {
       required OcrScript script,
       double pixelScale,
@@ -61,7 +62,7 @@ class FakeOcrEngine implements OcrEngine {
       throw UnimplementedError('recognizeRegion は呼ばれる想定ではありません');
     }
     return callback(
-      imageFile,
+      encodedImageBytes,
       region,
       script: script,
       pixelScale: pixelScale,

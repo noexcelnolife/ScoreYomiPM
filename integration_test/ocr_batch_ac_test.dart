@@ -145,7 +145,9 @@ Future<OcrBatchImageResult> _recognizeOne(
   final fileName = imageFile.uri.pathSegments.last;
   final stopwatch = Stopwatch()..start();
   try {
-    final page = await engine.recognize(imageFile);
+    // WHY(バイト列で渡すか): OcrEngine の入力契約はバイト列に統一した。
+    // ファイル名は結果の識別子としてのみ使い、認識経路には渡さない。
+    final page = await engine.recognize(await imageFile.readAsBytes());
     stopwatch.stop();
     return OcrBatchImageResult(
       file: fileName,

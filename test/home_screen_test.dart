@@ -7,7 +7,7 @@
 // (d) OCR 成功で編集画面から戻ったとき、プレビューはクリアされる（v2 UX 改修1）
 // (e) OCR run をまたぐライブ辞書キャッシュは各 run で再構築される（v2 UX #13 フォローアップ）
 
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
@@ -30,7 +30,7 @@ import 'root_bundle_warmup.dart';
 import 'test_image_helper.dart';
 
 /// 必ず OcrEngineException を投げる OCR エンジン。
-Future<OcrPageResult> _throwOnRecognize(File imageFile) async =>
+Future<OcrPageResult> _throwOnRecognize(Uint8List encodedImageBytes) async =>
     throw const OcrEngineException('テスト用OCR失敗');
 
 class _FakeSongDatabaseService implements SongDatabaseService {
@@ -275,7 +275,13 @@ void main() {
     await tester.tap(find.text('画像を取り込む'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('HC プレーシェア'));
-    await tester.pumpAndSettle();
+    // WHY(pumpAndSettle を使わないか): 種別を選ぶとシートが閉じ、続けて OCR が
+    // 始まって進捗スピナー（無限アニメーション）が出る。スピナーが回り続ける間は
+    // pumpAndSettle がタイムアウトする。pop アニメーションぶんだけ固定で進めてから、
+    // OCR 経路の実 I/O は pumpThroughRealIo で待つ。
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await pumpThroughRealIo(tester);
 
     // OCR 成功 → 確認・編集画面へ遷移している。
     expect(find.byType(OcrResultScreen), findsOneWidget);

@@ -6,7 +6,7 @@
 /// - iOS: Apple Vision Framework（ML Kit 日本語未対応のため）
 library;
 
-import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' show Rect;
 
 import '../models/ocr_models.dart';
@@ -26,12 +26,14 @@ enum OcrScript { latin, japanese }
 /// 変換する責務を持つ。パイプライン（lib/ocr/pipeline.dart）は
 /// このインターフェースのみを経由して OCR を呼び出すこと。
 abstract class OcrEngine {
-  /// [imageFile] を解析し、共通データモデルで結果を返す。
+  /// [encodedImageBytes]（PNG/JPEG エンコード済みバイト列）を解析し、
+  /// 共通データモデルで結果を返す。
   ///
   /// 失敗時は [OcrEngineException] を投げる。
-  Future<OcrPageResult> recognize(File imageFile);
+  Future<OcrPageResult> recognize(Uint8List encodedImageBytes);
 
-  /// [imageFile] 内の [region]（画像座標・px）をクロップして再認識する。
+  /// [encodedImageBytes]（PNG/JPEG エンコード済みバイト列）内の [region]
+  ///（画像座標・px）をクロップして再認識する。
   ///
   /// Wave 2（spec.md §5.2 の領域クロップ再 OCR）で使う: 全体 OCR で
   /// 検出できなかったフィールド（判定数・レベル等）を、ラベル位置を実測
@@ -64,7 +66,7 @@ abstract class OcrEngine {
   ///
   /// 失敗時は [OcrEngineException] を投げる。
   Future<OcrPageResult> recognizeRegion(
-    File imageFile,
+    Uint8List encodedImageBytes,
     Rect region, {
     required OcrScript script,
     double pixelScale = 1.0,

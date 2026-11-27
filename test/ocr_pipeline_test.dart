@@ -1,6 +1,7 @@
 // Wave 2 ST-4 パイプライン統合テスト（fake engine TDD）。
 // RegionOcrRunner を含む経路、寸法欠落時 null、anchor 皆無時 full extract 同等。
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -13,6 +14,8 @@ import 'package:scoreyomipm/ocr/ocr_engine.dart';
 import 'package:scoreyomipm/ocr/pipeline.dart';
 import 'package:scoreyomipm/ocr/song_entry.dart';
 import 'package:scoreyomipm/ocr/song_repository.dart';
+
+import 'test_image_helper.dart';
 
 class _FakeEngine implements OcrEngine {
   OcrPageResult? recognizeResult;
@@ -30,14 +33,14 @@ class _FakeEngine implements OcrEngine {
   OcrPageResult? Function(double pixelScale)? regionResultForScale;
 
   @override
-  Future<OcrPageResult> recognize(File imageFile) async {
+  Future<OcrPageResult> recognize(Uint8List encodedImageBytes) async {
     recognizeCallCount++;
     return recognizeResult ?? OcrPageResult(elements: [], fullText: '');
   }
 
   @override
   Future<OcrPageResult> recognizeRegion(
-    File imageFile,
+    Uint8List encodedImageBytes,
     Rect region, {
     required OcrScript script,
     double pixelScale = 1.0,
@@ -151,7 +154,7 @@ void main() {
     test('spec あり: full-page extract + region OCR merge 結果が設定される', () async {
       // Arrange
       final engine = _FakeEngine();
-      final imageFile = File('test.png');
+      final imageFile = createTestImageFile();
 
       // full-page OCR 結果（GOOD=14 を正しく抽出、BAD は未抽出）
       engine.recognizeResult = OcrPageResult(
@@ -217,7 +220,7 @@ void main() {
     test('寸法欠落時: FR-3 null フォールバック、extractionResult=null', () async {
       // Arrange
       final engine = _FakeEngine();
-      final imageFile = File('test.png');
+      final imageFile = createTestImageFile();
 
       engine.recognizeResult = OcrPageResult(
         elements: [],
@@ -240,7 +243,7 @@ void main() {
       () async {
         // Arrange
         final engine = _FakeEngine();
-        final imageFile = File('test.png');
+        final imageFile = createTestImageFile();
 
         // numeric ラベル（GOOD/BAD/SCORE 等）のアンカーが何も無いページ結果。
         // songTitle/level spec は常に生成されるため region OCR は呼ばれる。
@@ -312,7 +315,7 @@ void main() {
         mainSongRepository: main,
         additionalSongRepository: additional,
       );
-      final context = await pipeline.run(File('test.png'));
+      final context = await pipeline.run(createTestImageFile());
 
       expect(context.songMatchResult, isNotNull);
       expect(
@@ -342,7 +345,7 @@ void main() {
       );
 
       final pipeline = OcrPipeline(engine: engine, mainSongRepository: main);
-      final context = await pipeline.run(File('test.png'));
+      final context = await pipeline.run(createTestImageFile());
 
       expect(context.songMatchResult, isNotNull);
       expect(
@@ -357,7 +360,7 @@ void main() {
       final engine = _engineWithSongTitle('Harmonia');
 
       final pipeline = OcrPipeline(engine: engine);
-      final context = await pipeline.run(File('test.png'));
+      final context = await pipeline.run(createTestImageFile());
 
       expect(context.songMatchResult, isNotNull);
       expect(context.songMatchResult!.bestMatchOriginal, equals('Harmonia'));
@@ -378,7 +381,7 @@ void main() {
       final engine = _engineWithSongTitle('Harmonia');
 
       final pipeline = OcrPipeline(engine: engine);
-      final context = await pipeline.run(File('test.png'));
+      final context = await pipeline.run(createTestImageFile());
 
       // WHY: FR-6 §2-5 Plan A。後段の曲別上限チェック等は bestMatch* の
       // 文字列ではなく辞書解決済みエントリを参照する。seed_v2 の Harmonia
@@ -407,7 +410,7 @@ void main() {
         engine: _engineWithSongTitle('Main Repo Song'),
         mainSongRepository: repo,
       );
-      final context = await pipeline.run(File('test.png'));
+      final context = await pipeline.run(createTestImageFile());
 
       expect(context.matchedSong, isNotNull);
       expect(context.matchedSong!.id, equals('main_test_001'));
@@ -431,7 +434,7 @@ void main() {
         engine: _engineWithSongTitle('Additional Song'),
         additionalSongRepository: repo,
       );
-      final context = await pipeline.run(File('test.png'));
+      final context = await pipeline.run(createTestImageFile());
 
       expect(context.matchedSong, isNotNull);
       expect(context.matchedSong!.id, equals('add_test_001'));
@@ -443,7 +446,7 @@ void main() {
       final engine = _engineWithSongTitle('存在しない曲XYZ');
 
       final pipeline = OcrPipeline(engine: engine);
-      final context = await pipeline.run(File('test.png'));
+      final context = await pipeline.run(createTestImageFile());
 
       expect(context.matchedSong, isNull);
     });
@@ -452,7 +455,7 @@ void main() {
       final engine = _FakeEngine();
 
       final pipeline = OcrPipeline(engine: engine);
-      final context = await pipeline.run(File('test.png'));
+      final context = await pipeline.run(createTestImageFile());
 
       expect(context.matchedSong, isNull);
     });
@@ -472,7 +475,7 @@ void main() {
       );
 
       final pipeline = OcrPipeline(engine: engine, mainSongRepository: main);
-      final context = await pipeline.run(File('test.png'));
+      final context = await pipeline.run(createTestImageFile());
 
       expect(context.songMatchResult, isNotNull);
       // main がマージからスキップされるため seed の 'Harmonia' が採用される
@@ -497,7 +500,7 @@ void main() {
       );
 
       final pipeline = OcrPipeline(engine: engine, mainSongRepository: main);
-      final context = await pipeline.run(File('test.png'));
+      final context = await pipeline.run(createTestImageFile());
 
       expect(context.songMatchResult, isNotNull);
       expect(
@@ -556,7 +559,7 @@ void main() {
       );
 
       final pipeline = OcrPipeline(engine: engine);
-      final context = await pipeline.run(File('test.png'));
+      final context = await pipeline.run(createTestImageFile());
 
       // genre 行（SOFT ROCIK LONG）に引っ張られず曲名行で自動決定する
       expect(context.songMatchResult, isNotNull);
@@ -613,7 +616,7 @@ void main() {
             );
 
       final pipeline = OcrPipeline(engine: engine);
-      final context = await pipeline.run(File('test.png'));
+      final context = await pipeline.run(createTestImageFile());
 
       // songTitle のプライマリ固定バンド [0.16, 0.30] → px (0, 128, 1200, 240)、
       // フォールバック広帯域 [0.14, 0.34] → px (0, 112, 1200, 272) の順に
@@ -653,7 +656,7 @@ void main() {
       // y [926, 1089]。
       final engine = _engineWithSongTitle('Sorrows', width: 1071, height: 2316);
       final pipeline = OcrPipeline(engine: engine);
-      final context = await pipeline.run(File('test.png'));
+      final context = await pipeline.run(createTestImageFile());
 
       // portrait バンド呼び出しで曲名要素が取得され照合が成立する
       expect(context.songMatchResult, isNotNull);

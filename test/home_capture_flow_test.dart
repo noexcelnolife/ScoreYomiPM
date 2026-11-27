@@ -125,7 +125,12 @@ Future<void> _tapResultCamera(WidgetTester tester) async {
   // 可視化してからタップする（既存テスト共通パターン）。
   await tester.ensureVisible(cameraRow);
   await tester.tap(cameraRow);
-  await tester.pumpAndSettle();
+  // WHY(pumpAndSettle を使わないか): 行をタップするとシートが閉じ、続けて OCR が
+  // 始まって進捗スピナー（無限アニメーション）が出る。スピナーは回り続けるため
+  // pumpAndSettle は必ずタイムアウトする。pop アニメーションぶんだけ固定で進め、
+  // OCR の実非同期は _waitForOcrResultScreen 側で待つ。
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
 }
 
 /// OCR 結果画面への遷移を実非同期で待つ（rootBundle 読込は FakeAsync 下で

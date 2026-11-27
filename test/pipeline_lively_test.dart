@@ -4,6 +4,7 @@
 // テストの目的（ヒントで livelyV1 に入り、領域 OCR を通らずに専用経路へ
 // 渡ること）に対して過剰。分類値だけ実寸法から決まれば十分。
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -22,9 +23,9 @@ class _LabelFakeEngine implements OcrEngine {
   int regionCalls = 0;
 
   @override
-  Future<OcrPageResult> recognize(File imageFile) async {
+  Future<OcrPageResult> recognize(Uint8List encodedImageBytes) async {
     recognizeCalls++;
-    final image = img.decodeImage(await imageFile.readAsBytes());
+    final image = img.decodeImage(encodedImageBytes);
     final width = (image?.width ?? 800).toDouble();
     final height = (image?.height ?? 600).toDouble();
     final left = width * 0.10;
@@ -56,7 +57,7 @@ class _LabelFakeEngine implements OcrEngine {
 
   @override
   Future<OcrPageResult> recognizeRegion(
-    File imageFile,
+    Uint8List encodedImageBytes,
     ui.Rect region, {
     required OcrScript script,
     double pixelScale = 1.0,

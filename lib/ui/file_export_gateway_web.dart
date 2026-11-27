@@ -1,27 +1,24 @@
-// Web 向けの [FileExportGateway]（dart:js_interop プラットフォーム専用）。
+// Web 向けの [FileExportGateway]（ダウンロードで保存する）。
 //
 // このファイルは `file_export_gateway.dart` から条件付きエクスポートされる。
-// Web プラットフォームでは dart:io が実行時に UnsupportedError を出すため、
-// ブラウザのダウンロード機能（AnchorElement.download）を使用する。
-//
-// dart:html を使う理由（package:web ではなく）: Tier A は --wasm ビルドを対象外にしているため、
-// dart:html の利用は許容される（計画 D11）。--wasm に移行する際は package:web への移行が必要。
+// 実端末では `file_export_gateway_io.dart` が代わりに使われる。
 
-import 'dart:html' as html;
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 
 import 'file_export_gateway.dart';
+import 'web_download.dart';
 
-/// Web ブラウザ向けの [FileExportGateway]。
+/// Web 向けの [FileExportGateway]。保存先を選ばせず、ブラウザのダウンロードに流す。
 class PlatformFileExportGateway implements FileExportGateway {
   const PlatformFileExportGateway();
 
   @override
   Future<XFile?> pickZip() {
-    // WHY(file_selector): `pickZip()` は `file_selector` の `openFile()` だけで実装でき、
-    // `dart:io` は一切使わない。io 版と同じコードで Web でも動作する（確認済み）。
+    // WHY(Web でも openFile を使うか): file_selector には Web 実装があり、
+    // 選んだファイルは XFile.readAsBytes() で読める。Web だけ input 要素を
+    // 自前で組み立てると、同じ操作で 2 通りのコードを保守することになる。
     return openFile(
       acceptedTypeGroups: const <XTypeGroup>[
         XTypeGroup(label: 'ZIP', extensions: <String>['zip']),
@@ -35,21 +32,9 @@ class PlatformFileExportGateway implements FileExportGateway {
     required String fileName,
     required String mimeType,
   }) async {
-    // WHY(ブラウザダウンロード): Web ではファイルシステムへの直接書き込みができないため、
-    // ブラウザのダウンロード機能（AnchorElement.download）を使用する。
-    // Uint8List は List<int> なので Blob のコンストラクタに直接渡せる（typedData は不要）。
-    final blob = html.Blob([bytes], mimeType);
-    final url = html.Url.createObjectUrlFromBlob(blob);
-    html.AnchorElement(href: url)
-      ..setAttribute('download', fileName)
-      ..click();
-
-    // WHY(revokeObjectUrl のタイミング): click() の直後に revoke すると、
-    // ブラウザ（Firefox / Safari 等）によってはダウンロードが始まる前に URL が無効化され失敗する。
-    // 次のイベントループに譲ってから revoke する。
-    await Future<void>.delayed(const Duration(seconds: 1));
-    html.Url.revokeObjectUrl(url);
-
+    await downloadBytes(bytes: bytes, fileName: fileName, mimeType: mimeType);
+    // WHY(fileName を返すか): ブラウザのダウンロードは成否を返さない。
+    // 「保存を要求した」ことだけを報告し、キャンセル（null）と区別する。
     return fileName;
   }
 }

@@ -1,5 +1,6 @@
-import 'dart:io';
 import 'dart:ui';
+
+import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 
@@ -68,10 +69,10 @@ class LivelyOcrRoute {
   };
 
   Future<LivelyOcrOutcome> run({
-    required File imageFile,
+    required Uint8List imageBytes,
     required OcrPageResult pageResult,
   }) async {
-    final photo = img.decodeImage(await imageFile.readAsBytes());
+    final photo = img.decodeImage(imageBytes);
     if (photo == null) {
       return LivelyOcrOutcome(
         extraction: null,
@@ -100,62 +101,54 @@ class LivelyOcrRoute {
         failureReason: 'パネルを切り出せませんでした',
       );
     }
-    final dir = Directory.systemTemp.createTempSync('lively_ocr_');
-    try {
-      final panelResult = await _recognize(dir, 'panel', panel);
-      final anchor = LivelyAnchor.detect(panelResult.elements);
-      if (anchor == null) {
-        return LivelyOcrOutcome(
-          extraction: null,
-          regionOcr: titleRegion,
-          failureReason: 'パネル内の行ラベルから基準点を作れませんでした',
-        );
-      }
-      final panelValues = parser.parse(
-        panelResult.elements,
-        toP: (c) => Offset(anchor.pOfX(c.dx), anchor.pOfY(c.dy)),
-        rows: panelRows,
+    final panelResult = await _recognize(panel);
+    final anchor = LivelyAnchor.detect(panelResult.elements);
+    if (anchor == null) {
+      return LivelyOcrOutcome(
+        extraction: null,
+        regionOcr: titleRegion,
+        failureReason: 'パネル内の行ラベルから基準点を作れませんでした',
       );
-      final counters = await _readBlock(
-        dir,
-        panel,
-        anchor,
-        livelyCounterBlockP,
-        blockHeight,
-        const <LivelyRow>{
-          LivelyRow.cool,
-          LivelyRow.great,
-          LivelyRow.good,
-          LivelyRow.bad,
-        },
-      );
-      final combos = await _readBlock(
-        dir,
-        panel,
-        anchor,
-        livelyComboBlockP,
-        blockHeight,
-        const <LivelyRow>{LivelyRow.combo},
-      );
-      final scoreValues = await _readBlock(
-        dir,
-        panel,
-        anchor,
-        livelyScoreBlockP,
-        cellHeight,
-        const <LivelyRow>{LivelyRow.score},
-      );
-      final extraction = merger.extract(
-        panel: panelValues,
-        counterBlock: counters,
-        comboBlock: combos,
-        scoreBlock: scoreValues,
-        sourceElementCount: pageResult.elements.length,
-      );
-      return LivelyOcrOutcome(extraction: extraction, regionOcr: titleRegion);
-    } finally {
-      _deleteQuietly(dir);
     }
+    final panelValues = parser.parse(
+      panelResult.elements,
+      toP: (c) => Offset(anchor.pOfX(c.dx), anchor.pOfY(c.dy)),
+      rows: panelRows,
+    );
+    final counters = await _readBlock(
+      panel,
+      anchor,
+      livelyCounterBlockP,
+      blockHeight,
+      const <LivelyRow>{
+        LivelyRow.cool,
+        LivelyRow.great,
+        LivelyRow.good,
+        LivelyRow.bad,
+      },
+    );
+    final combos = await _readBlock(
+      panel,
+      anchor,
+      livelyComboBlockP,
+      blockHeight,
+      const <LivelyRow>{LivelyRow.combo},
+    );
+    final scoreValues = await _readBlock(
+      panel,
+      anchor,
+      livelyScoreBlockP,
+      cellHeight,
+      const <LivelyRow>{LivelyRow.score},
+    );
+    final extraction = merger.extract(
+      panel: panelValues,
+      counterBlock: counters,
+      comboBlock: combos,
+      scoreBlock: scoreValues,
+      sourceElementCount: pageResult.elements.length,
+    );
+    return LivelyOcrOutcome(extraction: extraction, regionOcr: titleRegion);
   }
 
   /// パネル内の 1 ブロックを切り出して読み、P 単位へ写して返す。
@@ -163,7 +156,6 @@ class LivelyOcrRoute {
   /// WHY 失敗を握りつぶすか: ブロック 1 本が落ちても他のパスで読める
   /// （統合の意味がそこにある）。落ちたことは値が欠けることで現れる。
   Future<Map<LivelyRow, LivelyRead>> _readBlock(
-    Directory dir,
     img.Image panel,
     LivelyAnchor anchor,
     Rect blockP,
@@ -174,7 +166,7 @@ class LivelyOcrRoute {
     final crop = LivelyImageOps.cropEnhanced(panel, rect, height);
     if (crop == null) return const {};
     try {
-      final result = await _recognize(dir, 'block', crop);
+      final result = await _recognize(crop);
       final width = (result.imageWidth ?? crop.width).toDouble();
       final heightPx = (result.imageHeight ?? crop.height).toDouble();
       if (width <= 0 || heightPx <= 0) return const {};
@@ -191,14 +183,10 @@ class LivelyOcrRoute {
     }
   }
 
-  Future<OcrPageResult> _recognize(
-    Directory dir,
-    String name,
-    img.Image image,
-  ) async {
-    final file = File('${dir.path}${Platform.pathSeparator}$name.jpg');
-    await file.writeAsBytes(img.encodeJpg(image, quality: jpegQuality));
-    return engine.recognize(file);
+  Future<OcrPageResult> _recognize(img.Image image) async {
+    // P3: 一時ファイル書き出しを廃止し、メモリ上のバイト列を engine に渡す。
+    final pngBytes = img.encodePng(image);
+    return engine.recognize(pngBytes);
   }
 
   /// パネルより上を曲名帯として渡す（曲名はパネルの外にある）。
@@ -244,11 +232,4 @@ class LivelyOcrRoute {
     failures: const <String, String>{},
   );
 
-  void _deleteQuietly(Directory dir) {
-    try {
-      dir.deleteSync(recursive: true);
-    } on FileSystemException {
-      // 一時ファイルの掃除失敗は処理結果に影響しない。
-    }
-  }
 }

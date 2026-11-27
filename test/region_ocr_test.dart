@@ -1,10 +1,12 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scoreyomipm/models/ocr_models.dart';
 import 'package:scoreyomipm/ocr/ocr_engine.dart';
 import 'package:scoreyomipm/ocr/region_ocr.dart';
+
+import 'test_image_helper.dart';
 
 OcrElement el(String text, double cx, double cy, {double hNorm = 0.02}) =>
     OcrElement(
@@ -59,12 +61,12 @@ class _RecordingRegionEngine implements OcrEngine {
   calls = [];
 
   @override
-  Future<OcrPageResult> recognize(File imageFile) async =>
+  Future<OcrPageResult> recognize(Uint8List encodedImageBytes) async =>
       OcrPageResult.empty();
 
   @override
   Future<OcrPageResult> recognizeRegion(
-    File imageFile,
+    Uint8List encodedImageBytes,
     Rect region, {
     required OcrScript script,
     double pixelScale = 1.0,
@@ -123,7 +125,7 @@ void main() {
 
       final result = await runner.run(
         pageResult,
-        File('sample.jpg'),
+        createTestImageBytes(),
         targets: {RegionTarget.good, RegionTarget.songTitle},
       );
 
@@ -162,7 +164,7 @@ void main() {
 
       final result = await runner.run(
         pageResult,
-        File('sample.jpg'),
+        createTestImageBytes(),
         targets: {RegionTarget.good},
       );
 
@@ -204,7 +206,7 @@ void main() {
 
       final result = await runner.run(
         pageResult,
-        File('sample.jpg'),
+        createTestImageBytes(),
         targets: {RegionTarget.songTitle},
       );
 
@@ -247,7 +249,7 @@ void main() {
       final runner = RegionOcrRunner(engine: engine);
       final result = await runner.run(
         portraitPage,
-        File('sample.jpg'),
+        createTestImageBytes(),
         targets: {RegionTarget.songTitle},
       );
 
@@ -274,7 +276,7 @@ void main() {
       final runner = RegionOcrRunner(engine: engine);
       final result = await runner.run(
         pageResult,
-        File('sample.jpg'),
+        createTestImageBytes(),
         targets: {RegionTarget.songTitle},
       );
 
@@ -294,7 +296,7 @@ void main() {
 
       final result = await runner.run(
         pageResult,
-        File('sample.jpg'),
+        createTestImageBytes(),
         targets: {RegionTarget.good},
       );
 
@@ -332,7 +334,7 @@ void main() {
 
       final result = await runner.run(
         pageResult,
-        File('sample.jpg'),
+        createTestImageBytes(),
         targets: {RegionTarget.good, RegionTarget.score},
       );
 
@@ -358,7 +360,7 @@ void main() {
 
       final result = await runner.run(
         pageResult,
-        File('sample.jpg'),
+        createTestImageBytes(),
         targets: {RegionTarget.songTitle},
       );
 
@@ -419,7 +421,7 @@ void main() {
 
       final result = await runner.run(
         pageResult,
-        File('sample.jpg'),
+        createTestImageBytes(),
         targets: {RegionTarget.songTitle},
       );
 
@@ -467,7 +469,7 @@ void main() {
 
       await runner.run(
         pageResult,
-        File('sample.jpg'),
+        createTestImageBytes(),
         targets: {RegionTarget.songTitle},
       );
 
@@ -501,7 +503,7 @@ void main() {
 
       final result = await runner.run(
         pageResult,
-        File('sample.jpg'),
+        createTestImageBytes(),
         targets: {RegionTarget.songTitle},
       );
 
@@ -524,7 +526,7 @@ void main() {
       final runner = RegionOcrRunner(engine: engine);
       final result = await runner.run(
         pageResult,
-        File('sample.jpg'),
+        createTestImageBytes(),
         targets: {RegionTarget.songTitle},
       );
 

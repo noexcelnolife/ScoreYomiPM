@@ -5,7 +5,7 @@
 /// FieldExtractor.extractWithRegions が担当する。
 library;
 
-import 'dart:io';
+import 'dart:typed_data';
 
 import '../models/ocr_models.dart';
 import 'field_extractor.dart';
@@ -41,6 +41,10 @@ class RegionOcrRunner {
 
   /// [pageResult]（全体 OCR 結果・寸法必須）を基にクロップ再 OCR を実行する。
   ///
+  /// [encodedImageBytes] は元画像のエンコード済みバイト列（PNG/JPEG）。
+  /// ファイル読み込み（readAsBytes）は呼び出し側（IO 層）で 1 箇所に寄せて
+  /// 渡す（P3: OcrEngine は barty入力化）。
+  ///
   /// [anchors] は ST-3.5 の UI アンカー検出結果（省略/null = 現行動作）。
   /// 領域算出（RegionSpecBuilder）だけに影響し、認識実行の契約は変わらない。
   ///
@@ -48,7 +52,7 @@ class RegionOcrRunner {
   /// に記録して計測レポートの根拠にする（マージでは未抽出扱いになるだけ）。
   Future<RegionOcrResult> run(
     OcrPageResult pageResult,
-    File imageFile, {
+    Uint8List encodedImageBytes, {
     Set<RegionTarget>? targets,
     AnchorRegistration? anchors,
     LayoutKind layoutKind = LayoutKind.hcV1,
@@ -90,7 +94,7 @@ class RegionOcrRunner {
         );
         try {
           final page = await engine.recognizeRegion(
-            imageFile,
+            encodedImageBytes,
             pixelRect,
             script: spec.script,
             pixelScale: spec.pixelScale,
@@ -118,7 +122,7 @@ class RegionOcrRunner {
           );
           try {
             final page = await engine.recognizeRegion(
-              imageFile,
+              encodedImageBytes,
               pixelRect,
               script: spec.script,
               pixelScale: spec.pixelScale,

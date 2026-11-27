@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' show Rect;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -25,9 +26,12 @@ void main() {
       final engine = MlKitOcrEngine();
       await engine.dispose();
 
+      // WHY(フィクスチャを読まないか): このテストが見るのは「dispose 済みなら
+      // 画素に触れる前に弾く」という順序の契約。入力の中身は結果に影響しない
+      // ため、実画像に依存させない（画像が無い環境でも契約を検証できる）。
       await expectLater(
         engine.recognizeRegion(
-          File(realImagePath),
+          Uint8List.fromList(<int>[0x00]),
           const Rect.fromLTWH(0, 0, 100, 50),
           script: OcrScript.latin,
         ),
@@ -35,13 +39,16 @@ void main() {
       );
     });
 
-    test('存在しない画像ファイルは OcrEngineException（全体 OCR と同一契約）', () async {
+    // WHY(壊れたバイト列で試すか): 入力がバイト列になったため「ファイルが無い」
+    // という失敗は起きない。エンジン境界で起こり得る失敗は「復号できない
+    // バイト列」であり、契約どおり OcrEngineException に包まれることを見る。
+    test('復号できないバイト列は OcrEngineException（全体 OCR と同一契約）', () async {
       final engine = MlKitOcrEngine();
       addTearDown(engine.dispose);
 
       await expectLater(
         engine.recognizeRegion(
-          File('does_not_exist.png'),
+          Uint8List.fromList(<int>[0x00, 0x01, 0x02, 0x03]),
           const Rect.fromLTWH(0, 0, 100, 50),
           script: OcrScript.latin,
         ),
@@ -55,7 +62,7 @@ void main() {
 
       await expectLater(
         engine.recognizeRegion(
-          File(realImagePath),
+          File(realImagePath).readAsBytesSync(),
           const Rect.fromLTWH(100, 100, 0, 50),
           script: OcrScript.latin,
         ),
@@ -63,7 +70,7 @@ void main() {
       );
       await expectLater(
         engine.recognizeRegion(
-          File(realImagePath),
+          File(realImagePath).readAsBytesSync(),
           const Rect.fromLTWH(100, 100, -10, 50),
           script: OcrScript.latin,
         ),
@@ -77,7 +84,7 @@ void main() {
 
       await expectLater(
         engine.recognizeRegion(
-          File(realImagePath),
+          File(realImagePath).readAsBytesSync(),
           const Rect.fromLTWH(100000, 100000, 50, 50),
           script: OcrScript.latin,
         ),
@@ -100,7 +107,7 @@ void main() {
 
       await expectLater(
         engine.recognizeRegion(
-          File(realImagePath),
+          File(realImagePath).readAsBytesSync(),
           const Rect.fromLTWH(-50, -50, 99999, 99999),
           script: OcrScript.latin,
         ),

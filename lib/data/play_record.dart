@@ -282,15 +282,14 @@ class PlayRecord {
     return value is int ? value : null;
   }
 
-  /// 保存済みの resultImagePath を移行読み込みする。
-  ///
-  /// 絶対パス（`/data/user/0/.../r123.jpg` や `C:\...\r123.jpg` 等）が残っている
-  /// 旧レコードから basename キー（`r123.jpg`）を取り出す。Web では絶対パスは
-  /// 意味を持たないため、basename キーに正規化して BlobStore で引けるようにする。
-  /// 空文字・ basename のままの場合はそのまま返す。
+  /// WHY(読み込み時に basename へ寄せるか): v1.0.3 以前は resultImagePath に
+  /// 端末の絶対パス（`/data/user/0/.../r123.jpg` や `C:\...\r123.jpg`）を保存して
+  /// いた。保存先がディスクから IndexedDB に変わると絶対パスは意味を持たないため、
+  /// 読み込み時点で basename に正規化し、保存先からの相対キーとして解決する。
+  /// 空文字と、既に basename のものはそのまま返す。
   static String _migrateResultImagePath(String path) {
     if (path.isEmpty) return path;
-    final normalized = path.replaceAll(r'\', '/');
+    final String normalized = path.replaceAll(r'\', '/');
     final int slash = normalized.lastIndexOf('/');
     return slash < 0 ? normalized : normalized.substring(slash + 1);
   }

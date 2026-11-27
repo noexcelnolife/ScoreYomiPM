@@ -17,6 +17,7 @@
 //   arcadeResultFrame→acV1。hint が期待レイアウトと異なるとき true。
 //   hint 未指定時は常に false（共有インテント経由 = 現行挙動完全不変・裁定 A）。
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -38,8 +39,8 @@ import 'support/image_fixture_skip.dart';
 /// フラグのみ・ML Kit 代替）。
 class _SizeAwareFakeEngine implements OcrEngine {
   @override
-  Future<OcrPageResult> recognize(File imageFile) async {
-    final bytes = await imageFile.readAsBytes();
+  Future<OcrPageResult> recognize(Uint8List encodedImageBytes) async {
+    final bytes = encodedImageBytes;
     final image = img.decodeImage(bytes);
     return OcrPageResult(
       elements: const [],
@@ -53,13 +54,13 @@ class _SizeAwareFakeEngine implements OcrEngine {
 
   @override
   Future<OcrPageResult> recognizeRegion(
-    File imageFile,
+    Uint8List encodedImageBytes,
     ui.Rect region, {
     required OcrScript script,
     double pixelScale = 1.0,
     bool contrastRetry = false,
   }) async {
-    final bytes = await imageFile.readAsBytes();
+    final bytes = encodedImageBytes;
     final image = img.decodeImage(bytes);
     return OcrPageResult(
       elements: const [],

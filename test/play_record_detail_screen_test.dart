@@ -23,6 +23,7 @@ import 'package:scoreyomipm/ui/play_record_detail_screen.dart';
 
 import 'fake_ocr_engine.dart';
 import 'fake_play_record_repository.dart';
+import 'real_async_helper.dart';
 import 'test_image_helper.dart';
 
 /// テスト用レコードが持つ画像ファイル名。
@@ -297,7 +298,12 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey<String>('rerun-ocr-button')));
-    await tester.pumpAndSettle();
+    // WHY(実 I/O を回すか): 再 OCR は原画像の readAsBytes を伴い、パイプライン
+    // 入口で実ファイルを読む。FakeAsync の下では完了しないため実時間を進める。
+    // WHY(実時間を長めに取るか): 再 OCR は原画像の一時ファイル書き出し・読み出しに
+    // 加えて、前処理（復号・傾き補正・アンカー検出）でも実ファイルを触る。FakeAsync の
+    // 下ではこれらが進まないため、実時間を進めないと失敗経路に到達しない。
+    await pumpThroughRealIo(tester, steps: 60, step: const Duration(milliseconds: 50));
 
     expect(find.textContaining('再OCRに失敗しました'), findsOneWidget);
     // 失敗してもレコードは未確定のまま残る。

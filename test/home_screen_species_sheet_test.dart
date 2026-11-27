@@ -232,8 +232,12 @@ Future<void> _importViaSheet(
   // WHY: シートは高さ上限でスクロールするため、下端の行は可視化してからタップする。
   await tester.ensureVisible(target);
   await tester.tap(target);
-  // シートが閉じきるのを待つ（pop アニメーション）。
-  await tester.pumpAndSettle();
+  // WHY(pumpAndSettle を使わないか): 行をタップするとシートが閉じ、続けて OCR が
+  // 始まって進捗スピナー（無限アニメーション）が出る。スピナーは回り続けるため
+  // pumpAndSettle は必ずタイムアウトする。pop アニメーションぶんだけ固定で進め、
+  // OCR の実非同期は _waitForOcrResultScreen 側で待つ。
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
 }
 
 /// OCR run の完了（確認画面遷移）を実非同期込みで待つ。
