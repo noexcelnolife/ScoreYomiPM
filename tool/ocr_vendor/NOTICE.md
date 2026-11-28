@@ -34,8 +34,12 @@
 Apache-2.0 の要求に従い、改変したファイルを明示する。
 
 - `web/ocr_vendor/paddleocr.bundle.js` は `dist/index.mjs` を esbuild でバンドル・minify したもの。
-  **ソースの改変は行っていない**（`--external:fs --external:path` はバンドラ側の解決指示であり、
-  ソースの書き換えではない）。
+  **ライブラリのソースは改変していない**（`--external:fs --external:path` はバンドラ側の解決指示で
+  あり、ソースの書き換えではない）。
+- バンドルの入口だけは自前の 2 行で、`@paddleocr/paddleocr-js` を import して
+  `globalThis.ScoreYomiOcr` に公開する。Dart 側は動的読み込みしたモジュールの名前空間を
+  直接受け取れないため、`export *` のままでは外から掴めない。これは配布物に対する
+  **追加**であり、ライブラリ本体の改変ではない。
 - `web/ocr_vendor/assets/worker-entry-*.js` は `dist/assets/` の**無改変コピー**。
 - `web/ocr_vendor/ort-wasm-simd-threaded.jsep.mjs` と `ort-wasm-simd-threaded.jsep.wasm` は
   `onnxruntime-web/dist/` の**無改変コピー**。

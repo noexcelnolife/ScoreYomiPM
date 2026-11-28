@@ -1,15 +1,17 @@
 // ホーム画面の能力分岐（Web / 端末）のテスト。
 //
 // 検証対象:
-// (1) Web 相当（canCaptureImages=false）: 注記文言が計画 §6.4 の確定文字列と
-//     完全一致し、「画像を取り込む」が消え、代わりに「記録を追加」が出る
-// (2) Web 相当: 「記録を追加」からスコア手入力画面へ到達できる
-// (3) Web 相当: 曲データベース更新の節（収録曲辞書）が出ない
-// (4) 端末相当（LocalCapabilities）: 従来どおり「画像を取り込む」と注記なし
+// (1) Web 相当（canPickImages=true / canCaptureWithCamera=false）:
+//     「画像を取り込む」が出て、旧注記（画像からの読み取り非対応）は出ない
+// (2) Web 相当: 種別選択シートに「ギャラリーから選択」は出るが「カメラで撮影」は出ない
+// (3) Web 相当: シートの「写真なしで手入力」からスコア手入力画面へ到達できる
+// (4) Web 相当: 曲データベース更新の節（収録曲辞書）が出ない
+// (5) 端末相当（LocalCapabilities）: 「画像を取り込む」と注記なし、Android では撮影行も出る
 //
-// WHY 文言の完全一致を見るか: この注記は「この環境では何ができないか」を
-// 利用者へ伝える唯一の説明で、言い回しが変わると実行できない操作を案内して
-// しまう。計画で確定した文字列をそのまま固定する。
+// WHY(旧注記の完全一致を見るか): ブラウザ版でも画像からの読み取りが動くように
+// なったため、この注記は Web では**出てはいけない**文字列になった。文言が
+// 復活すると「実行できるのに実行できないと案内する」状態に戻るので、
+// 確定文字列そのものを findsNothing で固定する。
 
 // WHY: この環境の Flutter では package:flutter/material.dart が非推奨で
 // material_ui が正規導入（既存テストの import 規約に合わせる）。
@@ -29,9 +31,9 @@ import 'fake_ocr_engine.dart';
 import 'fake_play_record_repository.dart';
 import 'root_bundle_warmup.dart';
 
-/// 計画 §6.4 の確定文字列（改行なしの 1 文）。
-const String _webNote =
-    'ブラウザ版は画像からの読み取りに対応していません。'
+/// 画像を取り込めない環境向けの注記（Web では出ない）。
+const String _unsupportedNote =
+    'この環境は画像からの読み取りに対応していません。'
     '記録は手入力か、バックアップの復元で追加してください';
 
 class _FakeSongDatabaseService extends SongDatabaseService {
@@ -84,28 +86,69 @@ Future<void> _pumpHome(
   await tester.pump();
 }
 
+/// 「画像を取り込む」から種別選択シートを開く。
+Future<void> _openSheet(WidgetTester tester) async {
+  await tester.tap(find.text('画像を取り込む'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUpAll(warmRootBundleAssets);
 
   group('Web 相当の能力（WebCapabilities）', () {
-    testWidgets('注記が確定文字列と完全一致し、画像取り込みの入口が無い', (WidgetTester tester) async {
+    testWidgets('画像取り込みの入口があり、非対応の注記は出ない', (WidgetTester tester) async {
       await _pumpHome(tester, const WebCapabilities());
 
-      expect(find.text(_webNote), findsOneWidget);
-      // WHY findsNothing: OCR が無い環境で「画像を取り込む」を出すと、押しても
-      // 必ず失敗する入口になる（押せないボタンを残さない）。
-      expect(find.text('画像を取り込む'), findsNothing);
-      expect(find.text('記録を追加'), findsOneWidget);
+      // WHY: ブラウザ版でも OCR は動く（PaddleOCR.js を同梱）。取り込みの
+      // 入口を閉じると、動くはずの機能を利用者から隠すことになる。
+      expect(find.text('画像を取り込む'), findsOneWidget);
+      expect(find.text(_unsupportedNote), findsNothing);
+      expect(find.text('記録を追加'), findsNothing);
     });
 
-    testWidgets('「記録を追加」からスコア手入力画面へ到達できる', (WidgetTester tester) async {
+    testWidgets('種別選択シートに撮影行は出ないが、ギャラリー行は出る', (WidgetTester tester) async {
       await _pumpHome(tester, const WebCapabilities());
+      await _openSheet(tester);
 
-      await tester.tap(find.text('記録を追加'));
+      expect(
+        find.byKey(const ValueKey<String>('species-row-result-gallery')),
+        findsOneWidget,
+      );
+      // WHY: テスト環境の既定 platform は Android。capability を見ていなければ
+      // 撮影行が出てしまうので、この findsNothing が capability gate の証明になる。
+      expect(
+        find.byKey(const ValueKey<String>('species-row-result-camera')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('species-row-lively-camera')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('species-row-lively-gallery')),
+        findsOneWidget,
+      );
+      // WHY: ブラウザが開くのはファイル選択なので、呼び名もそれに合わせる。
+      expect(find.text('ファイルを選択'), findsNWidgets(2));
+      expect(find.text('ギャラリーから選択'), findsNothing);
+    });
+
+    testWidgets('シートの手入力からスコア手入力画面へ到達できる', (WidgetTester tester) async {
+      await _pumpHome(tester, const WebCapabilities());
+      await _openSheet(tester);
+
+      // WHY(ensureVisible か): シートは 800x600 のテスト面より縦に長く、
+      // 最下段の「写真なしで手入力」は初期表示で画面外にある。
+      final Finder manualRow = find.byKey(
+        const ValueKey<String>('species-row-manual-entry'),
+      );
+      await tester.ensureVisible(manualRow);
+      await tester.pumpAndSettle();
+      await tester.tap(manualRow);
       await tester.pumpAndSettle();
 
-      // WHY 手入力を Web の主導線にするか: 画像が読めなくても記録を増やす手段が
-      // 要る。OcrResultScreen の pageResult 無しモードがそのまま使える。
+      // WHY 手入力を残すか: 写真が読めない場面（ブレ・欠け）でも記録を増やす
+      // 手段が要る。OcrResultScreen の pageResult 無しモードがそのまま使える。
       expect(find.byType(OcrResultScreen), findsOneWidget);
       expect(find.text('スコア手入力'), findsOneWidget);
     });
@@ -136,12 +179,35 @@ void main() {
   });
 
   group('端末相当の能力（LocalCapabilities）', () {
-    testWidgets('従来どおり画像取り込みの入口があり、Web 注記は出ない', (WidgetTester tester) async {
+    testWidgets('従来どおり画像取り込みの入口があり、非対応の注記は出ない', (
+      WidgetTester tester,
+    ) async {
       await _pumpHome(tester, const LocalCapabilities());
 
       expect(find.text('画像を取り込む'), findsOneWidget);
-      expect(find.text(_webNote), findsNothing);
+      expect(find.text(_unsupportedNote), findsNothing);
       expect(find.text('記録を追加'), findsNothing);
+    });
+
+    testWidgets('Android では撮影行が出る（既定の canCaptureWithCamera=true を保つ）', (
+      WidgetTester tester,
+    ) async {
+      await _pumpHome(tester, const LocalCapabilities());
+      await _openSheet(tester);
+
+      // WHY: 能力フラグを渡し忘れた画面で撮影入口が黙って消えないことを
+      // ここで固定しておく（既定値 true の意図）。
+      expect(
+        find.byKey(const ValueKey<String>('species-row-result-camera')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('species-row-lively-camera')),
+        findsOneWidget,
+      );
+      // 端末では従来どおりの呼び名のまま。
+      expect(find.text('ギャラリーから選択'), findsNWidgets(2));
+      expect(find.text('ファイルを選択'), findsNothing);
     });
 
     testWidgets('収録曲辞書の節が出る', (WidgetTester tester) async {

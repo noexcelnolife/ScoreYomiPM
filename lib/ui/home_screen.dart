@@ -188,7 +188,13 @@ class _HomeScreenState extends State<HomeScreen> {
   static const int _recentRecordCount = 3;
 
   _HomePhase _phase = _HomePhase.idle;
-  File? _selectedImage;
+
+  /// プレビュー用の画像バイト列（OCR に渡したものと同じ）。
+  ///
+  /// WHY(File ではなくバイト列か): 取り込み経路はどの環境でもバイト列になる。
+  /// `Image.file` は `dart:io` を要求し、ブラウザでは File を作れないため
+  /// プレビューだけが落ちる。バイト列なら全環境で同じ描画になる。
+  Uint8List? _selectedPreviewBytes;
   String? _errorMessage;
 
   /// 最近の記録（未取得・取得失敗時は null = セクション非表示）。
@@ -475,10 +481,11 @@ class _HomeScreenState extends State<HomeScreen> {
     String? sourcePath,
   }) async {
     setState(() {
-      // WHY(File に戻すか): ホームのプレビューは Image.file で描いており、
-      // その Web 対応はこのタスクの範囲外（OCR-D は入力経路のバイト列化まで）。
-      // パスを持たない入力ではプレビューを出さない。
-      _selectedImage = sourcePath == null ? null : File(sourcePath);
+      // WHY(バイト列で持つか): 取り込み経路はすでにバイト列なので、プレビュー
+      // だけのために `dart:io` の File を作り直す必要が無い。ブラウザには
+      // File が存在せず（`File(picked.path)` は実行時に失敗する）、
+      // パスの有無でプレビューの有無が変わるのも望ましくない。
+      _selectedPreviewBytes = imageBytes;
       _phase = _HomePhase.running;
       _errorMessage = null;
     });
@@ -531,7 +538,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // しない。OCR 失敗などで遷移していない場合（pageResult == null）は
       // エラーカードと合わせて取り込み直しの文脈として画像を保持する。
       setState(() {
-        _selectedImage = null;
+        _selectedPreviewBytes = null;
       });
       // WHY(v4 案1): 確認・修正画面で保存/未確定保存が行われた可能性がある
       // ため、ホーム復帰時に最近の記録を更新する。
@@ -590,6 +597,8 @@ class _HomeScreenState extends State<HomeScreen> {
             machine: machine,
           ),
           onManualEntry: (String? machine) => _openManualEntry(machine),
+          canCaptureWithCamera: widget.capabilities.canCaptureWithCamera,
+        imagePickerLabel: widget.capabilities.imagePickerLabel,
         );
       },
     );
@@ -617,12 +626,15 @@ class _HomeScreenState extends State<HomeScreen> {
       // ユーザーが選択をキャンセルした場合は何もしない。
       return;
     }
-    final File imageFile = File(picked.path);
+    // WHY(XFile から直接読むか): ブラウザでは `picked.path` が `blob:` URL に
+    // なり、`File(picked.path)` は実行時に失敗する（`dart:io` は Web で
+    // 使えない）。XFile.readAsBytes は全プラットフォームで同じ結果になる。
+    final Uint8List imageBytes = await picked.readAsBytes();
     // WHY(v5 機能 A): シートで選ばれた機種だけを OCR 画面の初期値へ渡す。
     // 原画像はここで1度だけ読み、以降はバイト列で運ぶ（OCR の入力契約）。
     await _runOcrAndNavigate(
-      await imageFile.readAsBytes(),
-      sourcePath: imageFile.path,
+      imageBytes,
+      sourcePath: picked.path,
       layoutHint: layoutHint,
       initialMachine: machine,
     );
@@ -973,13 +985,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// 選択済み画像のプレビュー、または未選択時の案内を表示する。
   Widget _buildImageSection(ThemeData theme) {
-    final File? selectedImage = _selectedImage;
-    if (selectedImage != null) {
+    final Uint8List? previewBytes = _selectedPreviewBytes;
+    if (previewBytes != null) {
       return Column(
         children: <Widget>[
           Card(
             clipBehavior: Clip.antiAlias,
-            child: Image.file(selectedImage, fit: BoxFit.contain),
+            // WHY(memory か): プレビューの元になるのは OCR に渡したバイト列
+            // そのもので、取り込み経路はすでにバイト列になっている。
+            // `Image.file` は `dart:io` の File を要求するため、ブラウザでは
+            // 描画できず（そもそも File を作れない）、パスの有無でプレビューの
+            // 有無が変わってしまう。バイト列で描けば全環境で同じ挙動になる。
+            child: Image.memory(previewBytes, fit: BoxFit.contain),
           ),
           const SizedBox(height: 24),
         ],
@@ -990,16 +1007,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// 画像未選択時の案内表示。
   Widget _buildIdleIntro(ThemeData theme) {
-    // WHY(画像を扱えない環境で文言を差し替えるか): 「リザルト画面を選択して
+    // WHY(画像を取り込めない環境で文言を差し替えるか): 「リザルト画面を選択して
     // OCR で読み取る」は、その手段が無い環境では実行できない指示になる。
     // 代わりに、実際に使える導線（手入力・バックアップ復元）を案内する。
-    if (!widget.capabilities.canCaptureImages) {
+    //
+    // WHY(canPickImages で分岐するか): 取り込みの入口は「保存済みの画像を選ぶ」
+    // と「その場で撮る」に分かれ、ブラウザ版は前者だけができる。以前は 1 つの
+    // フラグで両方を表していたため、ブラウザ版でもこの案内が出ていた。
+    if (!widget.capabilities.canPickImages) {
       return Column(
         children: <Widget>[
           Icon(Icons.edit_note, size: 72, color: theme.colorScheme.primary),
           const SizedBox(height: 16),
           Text(
-            'ブラウザ版は画像からの読み取りに対応していません。'
+            'この環境は画像からの読み取りに対応していません。'
             '記録は手入力か、バックアップの復元で追加してください',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge,
@@ -1029,21 +1050,43 @@ class _HomeScreenState extends State<HomeScreen> {
   /// スピナーに置換されるため、ガイドも自然に消える（追加分岐なし）。
   Widget _buildActionSection(ThemeData theme) {
     if (_phase == _HomePhase.running) {
-      return const Column(
+      // WHY(初回だけ説明を足すか): ブラウザ版は初回に約 69MB（認識モデル
+      // 21.5MB を含む）を取りに行くため、初回の 1 回だけ待ち時間が桁違いに
+      // 長い。「OCRを実行中…」だけだと固まったように見え、タブを閉じられる。
+      // 2 回目以降はブラウザにもエンジンにもキャッシュが効くので出さない。
+      //
+      // WHY(エンジンに聞くか): 読み込みが要るかどうかは環境依存の実装詳細で、
+      // 画面が `kIsWeb` で分岐すると判定が 2 箇所に散る。`isPreparing` は
+      // エンジンが名乗る性質（既定 false）なので、画面は環境を知らずに済む。
+      // 読むのは実行開始時の 1 回だけ。`running` に入る時点で読めば足りる。
+      final bool isLoadingEngine = widget.ocrEngine.isPreparing;
+      return Column(
         children: <Widget>[
           // WHY: 外側 Column が CrossAxisAlignment.stretch のため Center で包まないと
           // スピナーが横幅いっぱいに引き伸ばされ楕円に見える。36px 中央表示を維持する。
-          Center(child: CircularProgressIndicator()),
-          SizedBox(height: 16),
-          Center(child: Text('OCRを実行中…')),
+          const Center(child: CircularProgressIndicator()),
+          const SizedBox(height: 16),
+          const Center(child: Text('OCRを実行中…')),
+          if (isLoadingEngine) ...<Widget>[
+            const SizedBox(height: 8),
+            Center(
+              child: Text(
+                '初回のみ読み取りエンジンを読み込んでいます',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.secondary,
+                ),
+              ),
+            ),
+          ],
         ],
       );
     }
-    // WHY(画像を取り込めない環境でボタンを差し替えるか): 撮影・ギャラリー
-    // 取り込みは OCR が前提で、その手段が無い環境では押しても必ず失敗する。
-    // ただし手入力の入口は必要なので、ボタン自体は残し、行き先だけを
-    // 種別選択シートではなく手入力画面へ変える（押せないボタンを残さない）。
-    if (!widget.capabilities.canCaptureImages) {
+    // WHY(画像を取り込めない環境でボタンを差し替えるか): 取り込みは OCR が
+    // 前提で、その手段が無い環境では押しても必ず失敗する。ただし手入力の
+    // 入口は必要なので、ボタン自体は残し、行き先だけを種別選択シートではなく
+    // 手入力画面へ変える（押せないボタンを残さない）。
+    if (!widget.capabilities.canPickImages) {
       return Column(
         children: <Widget>[
           FilledButton.icon(

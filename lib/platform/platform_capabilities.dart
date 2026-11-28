@@ -9,8 +9,25 @@
 /// フラグは「対応済み」という誤解を生む。保存先の選択や共有の実装差は
 /// ゲートウェイの条件付き実装側で吸収済みで、フラグを要さない。
 abstract class PlatformCapabilities {
-  /// カメラ・ギャラリーから画像を取り込み、OCR を実行できるか。
-  bool get canCaptureImages;
+  /// 画像ファイルを選んで取り込めるか（端末のギャラリー／ブラウザの
+  /// ファイル選択を問わない）。
+  ///
+  /// WHY(撮影と分けるか): 取り込みの入口は「保存済みの画像を選ぶ」と
+  /// 「その場で撮る」の 2 つがあり、環境によって使える方が違う。1 つの
+  /// フラグにまとめると「撮れないから選べない」という誤った含意が生まれ、
+  /// ブラウザ版で読み取り導線まで閉じてしまう。
+  bool get canPickImages;
+
+  /// カメラで撮影して画像を取り込めるか。
+  bool get canCaptureWithCamera;
+
+  /// 画像を選ぶ入口の呼び名。
+  ///
+  /// WHY(呼び名まで能力にするか): ブラウザが開くのは OS のファイル選択で、
+  /// 「ギャラリー」ではない。だが UI に `kIsWeb` を書かない方針なので、
+  /// 環境ごとに変わる文言も能力として注入する。`canCaptureWithCamera` から
+  /// 推測すると「カメラが無い＝ブラウザ」という誤った結び付きが残る。
+  String get imagePickerLabel;
 
   /// 他アプリからの共有インテントを受け取れるか。
   bool get canReceiveShareIntent;
@@ -27,7 +44,13 @@ class LocalCapabilities implements PlatformCapabilities {
   const LocalCapabilities();
 
   @override
-  bool get canCaptureImages => true;
+  bool get canPickImages => true;
+
+  @override
+  bool get canCaptureWithCamera => true;
+
+  @override
+  String get imagePickerLabel => 'ギャラリーから選択';
 
   @override
   bool get canReceiveShareIntent => true;

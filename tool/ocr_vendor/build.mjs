@@ -173,7 +173,16 @@ function ensureDependencies() {
 async function bundle() {
   cleanGeneratedArtifacts();
   mkdirSync(join(outDir, 'assets'), { recursive: true });
-  writeFileSync(entryPath, "export * from '@paddleocr/paddleocr-js';\n", 'utf8');
+  // WHY 名前空間を globalThis へ公開するのか: Dart からは動的に読み込んだ ES モジュールの
+  // 名前空間を直接受け取れない（<script type="module"> の評価結果は外に出てこない）。
+  // `export *` のままだと、モジュールを読み込めても中身を掴む手段が無い。
+  // そこでバンドル自身が `globalThis.ScoreYomiOcr` に生やし、Dart 側は
+  // 読み込み完了後にそのプロパティを読む。
+  writeFileSync(
+    entryPath,
+    "import * as paddle from '@paddleocr/paddleocr-js';\nglobalThis.ScoreYomiOcr = paddle;\n",
+    'utf8',
+  );
   log('バンドル: esbuild 実行中...');
   try {
     // esbuild は静的 import にしてはならない。

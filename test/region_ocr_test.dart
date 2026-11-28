@@ -24,7 +24,7 @@ OcrElement el(String text, double cx, double cy, {double hNorm = 0.02}) =>
 /// WHY: クロップ再 OCR の TDD は「どの領域に・どのスクリプトで・何回
 /// 呼ぶか」を呼び出し記録で検証する（リーダー指定）。認識内容そのものは
 /// エミュレータ上の統合計測で検証する。
-class _RecordingRegionEngine implements OcrEngine {
+class _RecordingRegionEngine extends OcrEngine {
   _RecordingRegionEngine({
     OcrPageResult? regionResult,
     this.regionResults,

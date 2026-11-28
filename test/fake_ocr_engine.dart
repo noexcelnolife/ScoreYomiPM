@@ -10,7 +10,7 @@ import 'package:scoreyomipm/ocr/ocr_engine.dart';
 ///
 /// [onRecognize] を渡すと recognize の戻り値・例外をテスト側で制御できる。
 /// 未指定の場合は UnimplementedError（呼ばれるはずのないメソッド）。
-class FakeOcrEngine implements OcrEngine {
+class FakeOcrEngine extends OcrEngine {
   FakeOcrEngine({this.onRecognize, this.onRecognizeRegion});
 
   /// recognize の実装。null の場合は呼ばれた時点でテスト失敗扱い。

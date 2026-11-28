@@ -37,7 +37,7 @@ import 'support/image_fixture_skip.dart';
 /// 渡されたファイル（full-page 画像と領域クロップの両方）を実デコードし、
 /// 実寸法を返す。要素は空でよい（本テストの検証対象は layoutKind と不一致
 /// フラグのみ・ML Kit 代替）。
-class _SizeAwareFakeEngine implements OcrEngine {
+class _SizeAwareFakeEngine extends OcrEngine {
   @override
   Future<OcrPageResult> recognize(Uint8List encodedImageBytes) async {
     final bytes = encodedImageBytes;

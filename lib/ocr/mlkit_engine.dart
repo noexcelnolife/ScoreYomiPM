@@ -40,7 +40,7 @@ enum MlKitScript { japanese, latin }
 ///
 /// recognizer はスクリプトごとに遅延生成して再利用し、[dispose] で
 /// 一括解放する（recognize のたびに生成/解放するとオーバーヘッドが大きい）。
-class MlKitOcrEngine implements OcrEngine {
+class MlKitOcrEngine extends OcrEngine {
   /// [recognize] でスクリプトが指定されない場合に使うスクリプト。
   final MlKitScript defaultScript;
 

@@ -25,7 +25,7 @@ import 'support/image_fixture_skip.dart';
 ///
 /// WHY: ST-4 は寸法欠落で領域 OCR をスキップするため、寸法を返さない fake では
 /// run が完了しない。要素は空でよい（本テストの対象は補正のゲートと後始末）。
-class _SizeAwareFakeEngine implements OcrEngine {
+class _SizeAwareFakeEngine extends OcrEngine {
   @override
   Future<OcrPageResult> recognize(Uint8List encodedImageBytes) async {
     final image = img.decodeImage(encodedImageBytes);

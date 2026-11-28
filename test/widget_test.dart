@@ -22,7 +22,7 @@ import 'root_bundle_warmup.dart';
 /// テスト用の空実装エンジン（DIP 注入の確認も兼ねる）。
 ///
 /// ビルド検証テストでは OCR を実行しないため、全メソッドは未実装のままでよい。
-class _FakeOcrEngine implements OcrEngine {
+class _FakeOcrEngine extends OcrEngine {
   @override
   Future<OcrPageResult> recognize(Uint8List encodedImageBytes) => throw UnimplementedError();
 

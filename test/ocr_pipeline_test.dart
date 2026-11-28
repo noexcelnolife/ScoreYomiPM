@@ -17,7 +17,7 @@ import 'package:scoreyomipm/ocr/song_repository.dart';
 
 import 'test_image_helper.dart';
 
-class _FakeEngine implements OcrEngine {
+class _FakeEngine extends OcrEngine {
   OcrPageResult? recognizeResult;
   OcrPageResult? recognizeRegionResult;
   int recognizeCallCount = 0;

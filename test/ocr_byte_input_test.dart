@@ -67,7 +67,7 @@ img.Image _landscapeFlat({int width = 1620, int height = 1080}) {
 }
 
 /// 何も認識しない最小の fake エンジン。
-class _EmptyEngine implements OcrEngine {
+class _EmptyEngine extends OcrEngine {
   Uint8List? lastBytes;
 
   @override

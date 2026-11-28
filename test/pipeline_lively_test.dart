@@ -18,7 +18,7 @@ import 'package:scoreyomipm/ocr/pipeline.dart';
 ///
 /// ラベルを渡された画像サイズに対する比で置くので、パネルへのワープ後でも
 /// 基準点が必ず作れる（= 経路が最後まで進む）。
-class _LabelFakeEngine implements OcrEngine {
+class _LabelFakeEngine extends OcrEngine {
   int recognizeCalls = 0;
   int regionCalls = 0;
 

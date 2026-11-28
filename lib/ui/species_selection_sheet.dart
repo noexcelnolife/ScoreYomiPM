@@ -44,8 +44,10 @@ typedef MachineAction = void Function(String? machine);
 /// （ExpansionTile）を挟むと操作ステップが増えるため、親行の直下に 2 アクション
 /// を出す（設計 §1 の「展開」は展開形での提示と解釈）。
 ///
-/// WHY カメラ行の platform gate: Android しかカメラがないため、
-/// Windows/Web 等では表示しない（FR-9 §8）。
+/// WHY カメラ行の platform gate: Android しかカメラ実装がないため、
+/// Windows/Web 等では表示しない（FR-9 §8）。加えて [canCaptureWithCamera] が
+/// false の環境（ブラウザ版）でも出さない。画像の取り込み自体はブラウザでも
+/// できるので、ギャラリー行（＝ファイル選択）は残る。
 class SpeciesSelectionSheet extends StatefulWidget {
   const SpeciesSelectionSheet({
     super.key,
@@ -55,7 +57,23 @@ class SpeciesSelectionSheet extends StatefulWidget {
     required this.onPickLivelyGallery,
     required this.onPickLivelyCamera,
     required this.onManualEntry,
+    this.canCaptureWithCamera = true,
+    this.imagePickerLabel = 'ギャラリーから選択',
   });
+
+  /// この環境でカメラ撮影ができるか（既定は true）。
+  ///
+  /// WHY(既定を true にするか): 呼び出し元は HomeScreen の 1 箇所だけで、
+  /// そこは必ず能力フラグを渡す。既定を false にすると、能力を渡し忘れた
+  /// 画面で撮影入口が黙って消える（気付きにくい退行）。撮影可否は
+  /// 能力フラグが単一の真実源で、既定値はその判断を上書きしない。
+  final bool canCaptureWithCamera;
+
+  /// 画像を選ぶ入口の呼び名（ブラウザでは「ファイルを選択」）。
+  ///
+  /// WHY(既定を「ギャラリーから選択」にするか): [canCaptureWithCamera] と同じ理由で、
+  /// 渡し忘れても Android の見た目が退行しない側を既定にする。
+  final String imagePickerLabel;
 
   /// 「HC プレーシェア」行選択時のコールバック（シートを閉じた後に呼ぶ・機種付き）。
   final MachineAction onPickPlayShare;
@@ -114,8 +132,15 @@ class _SpeciesSelectionSheetState extends State<SpeciesSelectionSheet> {
     action(machineOverride ?? _machine);
   }
 
-  /// カメラアクションが表示されるか（platform gate: Android のみ）。
+  /// カメラアクションが表示されるか。
+  ///
+  /// WHY(能力フラグと platform の両方を見るか): カメラ撮影 UI は Android の
+  /// 実装にしか無い（platform gate）。加えて「Android だが撮影入口は出さない」
+  /// 環境（Android タブレットのブラウザ等）があるため、能力フラグを上位条件に
+  /// 置く。platform だけだとブラウザで撮影行が出て押しても失敗し、フラグだけ
+  /// だと Windows デスクトップで撮影行が出てしまう。両方の AND が正しい。
   bool _cameraVisible(BuildContext context) =>
+      widget.canCaptureWithCamera &&
       Theme.of(context).platform == TargetPlatform.android;
 
   @override
@@ -207,7 +232,7 @@ class _SpeciesSelectionSheetState extends State<SpeciesSelectionSheet> {
           children: <Widget>[
             ListTile(
               key: ValueKey<String>('species-row-result-gallery'),
-              title: const Text('ギャラリーから選択'),
+              title: Text(widget.imagePickerLabel),
               onTap: () => _closeAnd(context, widget.onPickResultGallery),
             ),
             // Androidのみカメラアクションを表示（platform gate）
@@ -266,7 +291,7 @@ class _SpeciesSelectionSheetState extends State<SpeciesSelectionSheet> {
           children: <Widget>[
             ListTile(
               key: const ValueKey<String>('species-row-lively-gallery'),
-              title: const Text('ギャラリーから選択'),
+              title: Text(widget.imagePickerLabel),
               onTap: () => _closeAnd(
                 context,
                 widget.onPickLivelyGallery,

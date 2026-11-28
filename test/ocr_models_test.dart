@@ -18,7 +18,7 @@ import 'test_image_helper.dart';
 
 /// recognize / recognizeRegion の呼び出しを記録し、固定結果または例外を
 /// 返す fake エンジン。
-class _FakeOcrEngine implements OcrEngine {
+class _FakeOcrEngine extends OcrEngine {
   _FakeOcrEngine({this.result, this.exception});
 
   /// recognize が成功した場合に返す結果。
