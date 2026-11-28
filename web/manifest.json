@@ -1,13 +1,17 @@
 {
-    "name": "scoreyomipm",
-    "short_name": "scoreyomipm",
+    "name": "スコアヨミPM",
+    "short_name": "スコアヨミ",
+    "id": "./",
     "start_url": ".",
+    "scope": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "lang": "ja",
+    "dir": "ltr",
+    "background_color": "#FFFFFF",
+    "theme_color": "#3F51B5",
+    "description": "ポップンミュージックのリザルト画像からスコアを読み取って記録するアプリ",
     "prefer_related_applications": false,
+    "categories": ["entertainment", "utilities"],
     "icons": [
         {
             "src": "icons/Icon-192.png",

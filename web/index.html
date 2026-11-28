@@ -18,7 +18,9 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="スコアヨミPM">
+  <meta name="description" content="ポップンミュージックのリザルト画像からスコアを読み取って記録するアプリ">
+  <!-- ブラウザ UI の色。アプリのシード色（Colors.indigo）に合わせている。 -->
+  <meta name="theme-color" content="#3F51B5">
 
   <!--
     Uncomment the tag below to lay the app out underneath the parts of the
@@ -35,8 +37,10 @@
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="scoreyomipm">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <meta name="apple-mobile-web-app-title" content="スコアヨミPM">
+  <!-- ホーム画面アイコンは 512 を渡す。iOS は 180 前後に縮小するので、
+       192 を渡すと粗くなる。 -->
+  <link rel="apple-touch-icon" href="icons/Icon-512.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
@@ -54,5 +58,56 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // WHY(index.html で登録するか): Flutter 側の登録は
+    // flutter_bootstrap.js で止めてある（自前の SW と二重登録しないため）。
+    // ここで登録しないと、殻がキャッシュされずオフライン起動できない。
+    // `load` を待つのは、初回表示を SW の install と競合させないため。
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('service_worker.js').catch(function (error) {
+          // 登録できなくてもアプリは動く（オンライン専用に退化するだけ）。
+          console.warn('Service Worker を登録できませんでした:', error);
+        });
+      });
+    }
+  </script>
+  <script>
+    // WHY(初回保存の「後」に呼ぶか): IndexedDB は空き容量が逼迫するとブラウザに
+    // 自動削除される。persistent storage に昇格させると削除の対象から外れる。
+    // 起動直後ではなく最初の書き込みの後に呼ぶのは、まだ何も保存していない段階で
+    // 許可を求めないため（Firefox は確認ダイアログを出す）。
+    // WHY(IndexedDB の put を包むか): 保存の実装は Dart 側（idb_shim）にあり、
+    // ここへ合図を送る口が無い。put を 1 回だけ包んで「最初の保存」を合図にする。
+    // 包みは最初の 1 回で外れるので、以降の保存は素の put がそのまま動く。
+    (function requestPersistentStorageAfterFirstSave() {
+      if (!navigator.storage || !navigator.storage.persist) return;
+      if (typeof IDBObjectStore === 'undefined') return;
+
+      var requested = false;
+      var originalPut = IDBObjectStore.prototype.put;
+
+      function persistOnce() {
+        if (requested) return;
+        requested = true;
+        IDBObjectStore.prototype.put = originalPut;
+        navigator.storage
+          .persisted()
+          .then(function (alreadyPersisted) {
+            if (alreadyPersisted) return null;
+            return navigator.storage.persist();
+          })
+          .catch(function (error) {
+            // 昇格できなくても保存自体は続く。ここで止める理由は無い。
+            console.warn('永続ストレージに昇格できませんでした:', error);
+          });
+      }
+
+      IDBObjectStore.prototype.put = function () {
+        persistOnce();
+        return originalPut.apply(this, arguments);
+      };
+    })();
+  </script>
 </body>
 </html>
