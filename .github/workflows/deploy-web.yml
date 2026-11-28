@@ -1,7 +1,9 @@
-# GitHub Pages への公開。**自動デプロイはしない**（reports/web-decisions.md D-W12）。
+# GitHub Pages への公開。
 #
-# WHY workflow_dispatch だけか: push のたびに公開されると、壊れたビルドや検証前の状態が
-# そのまま利用者に届く。公開は人が明示的に押したときだけ行う。
+# WHY push でも起動するか（D-W19）: workflow_dispatch は**既定ブランチにワークフローが無いと
+# 起動できない**（API は 404）。このワークフローは main に載せない方針なので、main に載るまでの
+# あいだは feature/web への push でも起動できるようにする。壊れたビルドは build ジョブで
+# 止まり、upload/deploy まで進まないため、壊れたものが公開されることはない。
 #
 # WHY tool/build_web.mjs を通すか: Web ビルドは 3 つの前提を同時に満たさないと壊れる（D-W17）。
 #   1. OCR 資産の生成（web/ocr_vendor/ は追跡外）
@@ -11,6 +13,12 @@
 name: Deploy Web
 
 on:
+  push:
+    branches:
+      - feature/web
+    # 文書だけの変更でデプロイし直さない。ワークフロー自体の変更は除外しない。
+    paths-ignore:
+      - '**/*.md'
   workflow_dispatch:
     inputs:
       ref:
@@ -68,6 +76,10 @@ jobs:
 
       - name: Pages の設定を読む
         uses: actions/configure-pages@v5
+        with:
+          # Pages サイトがまだ無いリポジトリでも、ワークフローの GITHUB_TOKEN で作成させる。
+          # 事前に人手で Settings → Pages を触らなくて済む。
+          enablement: true
 
       - name: 成果物をアップロード
         uses: actions/upload-pages-artifact@v3
