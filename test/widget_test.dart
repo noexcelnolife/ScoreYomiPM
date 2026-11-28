@@ -46,7 +46,7 @@ class _FakeOcrEngine implements OcrEngine {
 /// smoke test 用の SongDatabaseService fake（DIP 注入の確認も兼ねる）。
 ///
 /// ホーム画面の表示確認のみのため、更新処理は upToDate を返すだけでよい。
-class _FakeSongDatabaseService implements SongDatabaseService {
+class _FakeSongDatabaseService extends SongDatabaseService {
   @override
   Future<String> loadDistributionUrl() async => '';
 

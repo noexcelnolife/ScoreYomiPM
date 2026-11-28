@@ -34,7 +34,7 @@ const String _webNote =
     'ブラウザ版は画像からの読み取りに対応していません。'
     '記録は手入力か、バックアップの復元で追加してください';
 
-class _FakeSongDatabaseService implements SongDatabaseService {
+class _FakeSongDatabaseService extends SongDatabaseService {
   @override
   Future<String> loadDistributionUrl() async => '';
 

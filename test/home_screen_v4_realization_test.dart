@@ -22,7 +22,7 @@ import 'fake_play_record_repository.dart';
 import 'root_bundle_warmup.dart';
 
 /// 曲辞書サービスのフェイク（home_screen_test.dart のローカルフェイクと同型）。
-class _FakeSongDatabaseService implements SongDatabaseService {
+class _FakeSongDatabaseService extends SongDatabaseService {
   @override
   Future<String> loadDistributionUrl() async => '';
 

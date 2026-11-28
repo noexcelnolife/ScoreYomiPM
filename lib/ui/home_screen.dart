@@ -291,8 +291,14 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 辞書が差し替わったときの後始末（子の SongDbSection から呼ばれる）。
   Future<void> _handleSongDbChanged() async {
     if (!mounted) return;
-    await (widget.mainSongRepository as ReloadableSongRepository?)?.reload();
-    await (widget.additionalSongRepository as ReloadableSongRepository?)?.reload();
+    final mainRepo = widget.mainSongRepository;
+    if (mainRepo is ReloadableSongRepository) {
+      await (mainRepo as ReloadableSongRepository).reload();
+    }
+    final additionalRepo = widget.additionalSongRepository;
+    if (additionalRepo is ReloadableSongRepository) {
+      await (additionalRepo as ReloadableSongRepository).reload();
+    }
     // WHY: 古い辞書のままのキャッシュを捨て、タイトル行の件数を読み直させる。
     _liveSongSearch.invalidate();
     setState(() {
@@ -736,8 +742,8 @@ class _HomeScreenState extends State<HomeScreen> {
         listRecords: repository.listAll,
         writer: repository as PlayRecordBulkWriter,
         memoTemplateRepository: widget.memoTemplateRepository,
-        blobStore: (widget.songDatabaseService as FileSongDatabaseService).blobStore,
-        additionalSongRepository: widget.additionalSongRepository as ReloadableSongRepository?,
+        songDatabaseService: widget.songDatabaseService,
+        additionalSongRepository: _additionalSongRepo(widget.additionalSongRepository),
       );
     } else {
       importService = null;
@@ -748,7 +754,7 @@ class _HomeScreenState extends State<HomeScreen> {
           repository: repository,
           appVersion: kAppVersion,
           memoTemplateRepository: widget.memoTemplateRepository,
-          blobStore: (widget.songDatabaseService as FileSongDatabaseService).blobStore,
+          songDatabaseService: widget.songDatabaseService,
         ),
         fileGateway: const PlatformFileExportGateway(),
         importService: importService,
@@ -798,6 +804,11 @@ class _HomeScreenState extends State<HomeScreen> {
       ],
     );
   }
+
+  /// `widget.additionalSongRepository` が `ReloadableSongRepository` ならそのまま返し、
+  /// そうでなければ `null` を返す（型安全なダウンキャスト）。
+  ReloadableSongRepository? _additionalSongRepo(SongRepository? repo) =>
+      (repo is ReloadableSongRepository) ? repo as ReloadableSongRepository : null;
 
   @override
   Widget build(BuildContext context) {

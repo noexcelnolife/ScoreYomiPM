@@ -33,7 +33,7 @@ import 'test_image_helper.dart';
 Future<OcrPageResult> _throwOnRecognize(Uint8List encodedImageBytes) async =>
     throw const OcrEngineException('テスト用OCR失敗');
 
-class _FakeSongDatabaseService implements SongDatabaseService {
+class _FakeSongDatabaseService extends SongDatabaseService {
   @override
   Future<String> loadDistributionUrl() async => '';
 

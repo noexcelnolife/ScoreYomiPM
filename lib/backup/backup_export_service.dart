@@ -11,8 +11,7 @@ import '../data/memo_template.dart';
 import '../data/memo_template_repository.dart';
 import '../data/play_record.dart';
 import '../data/play_record_repository.dart';
-import '../platform/blob_store.dart';
-import '../songdb/song_db_paths.dart';
+import '../songdb/song_database_service.dart';
 import 'backup_archive_codec.dart';
 import 'backup_csv_encoder.dart';
 import 'backup_manifest.dart';
@@ -23,7 +22,7 @@ class BackupExportService {
     required this._repository,
     required this._appVersion,
     this._memoTemplateRepository,
-    required this._blobStore,
+    required this._songDatabaseService,
     this._codec = const BackupArchiveCodec(),
     this._csvEncoder = const BackupCsvEncoder(),
     this._clock = DateTime.now,
@@ -41,8 +40,8 @@ class BackupExportService {
   /// 既存の呼び出し側・テストを壊さない後方互換のため任意注入にする。
   final MemoTemplateRepository? _memoTemplateRepository;
 
-  /// ファイル保存先（追加辞書の読み出しに使用）。
-  final BlobStore _blobStore;
+  /// 辞書操作サービス（追加辞書の読み出しに使用）。
+  final SongDatabaseService _songDatabaseService;
 
   /// 全レコードと画像（とメモのテンプレート）を ZIP バイト列にする。
   Future<Uint8List> buildZip() async {
@@ -56,7 +55,7 @@ class BackupExportService {
     String? additionalSongs;
     int additionalSongCount = 0;
     try {
-      final bytes = await _blobStore.read(SongDbPaths.additionalDbRelativePath);
+      final bytes = await _songDatabaseService.readAdditionalJsonBytes();
       if (bytes != null) {
         additionalSongs = utf8.decode(bytes);
         final decoded = jsonDecode(additionalSongs) as Map<String, dynamic>;

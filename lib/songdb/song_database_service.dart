@@ -54,6 +54,12 @@ abstract class SongDatabaseService {
     required String fileName,
     int? declaredLength,
   });
+
+  /// 追加辞書の生 JSON バイト列を返す（存在しない場合は `null`）。
+  Future<Uint8List?> readAdditionalJsonBytes() async => null;
+
+  /// 追加辞書の生 JSON バイト列を上書き保存する。
+  Future<void> writeAdditionalJsonBytes(Uint8List bytes) async {}
 }
 
 /// [SongDatabaseService.updateFromUrl] / [updateFromConfiguredUrl] の結果状態。
@@ -562,6 +568,16 @@ class FileSongDatabaseService implements SongDatabaseService {
       utf8.encode(jsonEncode(envelope)),
     );
     return (envelope['songs'] as List<dynamic>).length;
+  }
+
+  @override
+  Future<Uint8List?> readAdditionalJsonBytes() async {
+    return blobStore.read(SongDbPaths.additionalDbRelativePath);
+  }
+
+  @override
+  Future<void> writeAdditionalJsonBytes(Uint8List bytes) async {
+    await blobStore.write(SongDbPaths.additionalDbRelativePath, bytes);
   }
 }
 

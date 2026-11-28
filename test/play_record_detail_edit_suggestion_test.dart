@@ -86,7 +86,7 @@ class _FakeSongRepository implements SongRepository {
   }
 }
 
-class _FakeSongDatabaseService implements SongDatabaseService {
+class _FakeSongDatabaseService extends SongDatabaseService {
   @override
   Future<String> loadDistributionUrl() async => '';
 

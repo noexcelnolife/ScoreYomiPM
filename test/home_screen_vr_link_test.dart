@@ -33,7 +33,7 @@ import 'fake_play_record_repository.dart';
 import 'test_image_helper.dart';
 import 'root_bundle_warmup.dart';
 
-class _FakeSongDatabaseService implements SongDatabaseService {
+class _FakeSongDatabaseService extends SongDatabaseService {
   @override
   Future<String> loadDistributionUrl() async => '';
 

@@ -6,7 +6,6 @@
 // 入出力だけをフェイクに差し替え、ZIP/CSV の生成と復元は本物のサービスを通す
 //（データ層との結線まで含めて壊れていないことを確認する）。
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
@@ -19,7 +18,7 @@ import 'package:scoreyomipm/backup/backup_format_exception.dart';
 import 'package:scoreyomipm/backup/backup_import_service.dart';
 import 'package:scoreyomipm/data/play_record.dart';
 import 'package:scoreyomipm/data/play_record_bulk_writer.dart';
-import 'package:scoreyomipm/platform/io_blob_store.dart';
+import 'package:scoreyomipm/songdb/song_database_service.dart';
 import 'package:scoreyomipm/ui/file_export_gateway.dart';
 import 'package:scoreyomipm/ui/backup_screen.dart';
 
@@ -118,12 +117,12 @@ _Harness _harness({
     exportService: BackupExportService(
       repository: repository,
       appVersion: kAppVersion,
-      blobStore: IoBlobStore(Directory.systemTemp),
+      songDatabaseService: FakeSongDatabaseServiceForTest(),
     ),
     importService: BackupImportService(
       listRecords: () async => existingRecords,
       writer: writer,
-      blobStore: IoBlobStore(Directory.systemTemp),
+      songDatabaseService: FakeSongDatabaseServiceForTest(),
     ),
     writer: writer,
     gateway: _FakeGateway(savePath: savePath),
@@ -532,4 +531,39 @@ void main() {
     expect(harness.gateway.saveCount, 1);
     expect(harness.gateway.savedFileName, 'scoreman-20261124-1230.zip');
   });
+}
+
+/// バックアップ画面テスト用のダミー SongDatabaseService。
+class FakeSongDatabaseServiceForTest extends SongDatabaseService {
+  @override
+  Future<SongImportResult> importAdditionalJson(
+    Uint8List bytes, {
+    required String fileName,
+    int? declaredLength,
+  }) async => throw UnimplementedError();
+
+  @override
+  Future<Uint8List?> readAdditionalJsonBytes() async => null;
+
+  @override
+  Future<void> writeAdditionalJsonBytes(Uint8List bytes) async {
+    // フェイク：何もしない。
+  }
+
+  @override
+  Future<String> loadDistributionUrl() async => throw UnimplementedError();
+
+  @override
+  Future<void> saveDistributionUrl(String url) async => throw UnimplementedError();
+
+  @override
+  Future<SongDatabaseStatus> loadStatus() async => throw UnimplementedError();
+
+  @override
+  Future<SongDbUpdateResult> updateFromConfiguredUrl() async =>
+      throw UnimplementedError();
+
+  @override
+  Future<SongDbUpdateResult> updateFromUrl(String url) async =>
+      throw UnimplementedError();
 }

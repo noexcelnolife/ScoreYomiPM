@@ -13,9 +13,8 @@ import 'dart:typed_data';
 import '../data/memo_template_repository.dart';
 import '../data/play_record.dart';
 import '../data/play_record_bulk_writer.dart';
-import '../platform/blob_store.dart';
 import '../ocr/song_repository.dart';
-import '../songdb/song_db_paths.dart';
+import '../songdb/song_database_service.dart';
 import 'backup_archive_codec.dart';
 import 'backup_manifest.dart';
 
@@ -95,7 +94,7 @@ class BackupImportService {
     required this._listRecords,
     required this._writer,
     this._memoTemplateRepository,
-    required this._blobStore,
+    required this._songDatabaseService,
     this._additionalSongRepository,
     this._codec = const BackupArchiveCodec(),
   });
@@ -107,8 +106,8 @@ class BackupImportService {
   /// メモテンプレートの復元先。null なら復元しない（旧 ZIP・機能未使用時）。
   final MemoTemplateRepository? _memoTemplateRepository;
 
-  /// ファイル保存先（追加辞書の書き込みに使用）。
-  final BlobStore _blobStore;
+  /// 辞書操作サービス（追加辞書の書き込みに使用）。
+  final SongDatabaseService _songDatabaseService;
 
   /// 追加辞書リポジトリ（復元後に `reload()` して表示を更新するため）。
   final ReloadableSongRepository? _additionalSongRepository;
@@ -228,8 +227,7 @@ class BackupImportService {
     }
     final ReloadableSongRepository? repository = _additionalSongRepository;
     try {
-      await _blobStore.write(
-        SongDbPaths.additionalDbRelativePath,
+      await _songDatabaseService.writeAdditionalJsonBytes(
         utf8.encode(additionalSongs),
       );
       if (repository != null) {

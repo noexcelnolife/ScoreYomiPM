@@ -47,7 +47,7 @@ import 'root_bundle_warmup.dart';
 // WHY: この環境の Flutter では package:flutter/material.dart が非推奨で
 // material_ui が正規導入（既存テストの import 規約に合わせる）。
 
-class _FakeSongDatabaseService implements SongDatabaseService {
+class _FakeSongDatabaseService extends SongDatabaseService {
   @override
   Future<String> loadDistributionUrl() async => '';
 

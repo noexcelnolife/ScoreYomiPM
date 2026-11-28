@@ -21,6 +21,7 @@ import 'package:scoreyomipm/data/play_record.dart';
 import 'package:scoreyomipm/data/play_record_repository.dart';
 import 'package:scoreyomipm/platform/blob_store.dart';
 import 'package:scoreyomipm/platform/io_blob_store.dart';
+import 'package:scoreyomipm/songdb/song_database_service.dart';
 import 'package:scoreyomipm/songdb/song_db_paths.dart';
 
 void main() {
@@ -63,7 +64,7 @@ void main() {
     return BackupImportService(
       listRecords: repository.listAll,
       writer: repository,
-      blobStore: repository.blobStore,
+      songDatabaseService: FileSongDatabaseService(blobStore: repository.blobStore),
     );
   }
 
@@ -94,7 +95,7 @@ void main() {
     return BackupExportService(
       repository: repoA,
       appVersion: '1.4.0+6',
-      blobStore: repoA.blobStore,
+      songDatabaseService: FileSongDatabaseService(blobStore: repoA.blobStore),
     ).buildZip();
   }
 
@@ -202,7 +203,7 @@ void main() {
     final String csv = await BackupExportService(
       repository: repoA,
       appVersion: '1.4.0+6',
-      blobStore: repoA.blobStore,
+      songDatabaseService: FileSongDatabaseService(blobStore: repoA.blobStore),
     ).buildCsv();
 
     expect(csv.startsWith('\uFEFF'), isTrue);
@@ -231,7 +232,7 @@ void main() {
       return BackupImportService(
         listRecords: repository.listAll,
         writer: repository,
-        blobStore: repository.blobStore,
+        songDatabaseService: FileSongDatabaseService(blobStore: repository.blobStore),
         memoTemplateRepository: templates ?? templatesB,
       );
     }
@@ -244,7 +245,7 @@ void main() {
       return BackupExportService(
         repository: repoA,
         appVersion: '1.4.0+6',
-        blobStore: repoA.blobStore,
+        songDatabaseService: FileSongDatabaseService(blobStore: repoA.blobStore),
         memoTemplateRepository: templatesA,
       ).buildZip();
     }
@@ -334,7 +335,7 @@ void main() {
       final BackupImportService service = BackupImportService(
         listRecords: repoB.listAll,
         writer: repoB,
-        blobStore: repoB.blobStore,
+        songDatabaseService: FileSongDatabaseService(blobStore: repoB.blobStore),
       );
 
       final BackupImportOutcome outcome = await service.apply(
@@ -416,7 +417,7 @@ void main() {
       final service = BackupImportService(
         listRecords: repoD.listAll,
         writer: repoD,
-        blobStore: repoD.blobStore,
+        songDatabaseService: FileSongDatabaseService(blobStore: repoD.blobStore),
       );
 
       final BackupImportOutcome outcome = await service.apply(
@@ -445,7 +446,7 @@ void main() {
       final exportService = BackupExportService(
         repository: repoC,
         appVersion: '1.4.0+6',
-        blobStore: repoC.blobStore,
+        songDatabaseService: FileSongDatabaseService(blobStore: repoC.blobStore),
       );
 
       // 例外にならないことを確認。

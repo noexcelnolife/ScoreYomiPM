@@ -9,7 +9,7 @@ import 'package:scoreyomipm/songdb/song_database_service.dart';
 import 'package:scoreyomipm/ui/song_db_section.dart';
 
 /// テスト用の SongDatabaseService fake（呼び出し記録と結果の注入ができる）。
-class _FakeSongDatabaseService implements SongDatabaseService {
+class _FakeSongDatabaseService extends SongDatabaseService {
   _FakeSongDatabaseService({
     this.storedUrl = '',
     this.updateResult = const SongDbUpdateResult(

@@ -29,7 +29,7 @@ import 'fake_ocr_engine.dart';
 import 'fake_play_record_repository.dart';
 import 'root_bundle_warmup.dart';
 
-class _FakeSongDatabaseService implements SongDatabaseService {
+class _FakeSongDatabaseService extends SongDatabaseService {
   @override
   Future<String> loadDistributionUrl() async => '';
 
