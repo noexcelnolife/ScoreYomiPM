@@ -96,7 +96,7 @@ void main() {
     final pipeline = OcrPipeline(engine: engine);
 
     final context = await pipeline.run(
-      image,
+      image.readAsBytesSync(),
       layoutHint: InputLayoutHint.livelyV1,
     );
 
@@ -116,7 +116,7 @@ void main() {
     final engine = _LabelFakeEngine();
     final pipeline = OcrPipeline(engine: engine);
 
-    final context = await pipeline.run(image);
+    final context = await pipeline.run(image.readAsBytesSync());
 
     expect(context.layoutHint, isNull);
     expect(context.layoutKind, isNot(LayoutKind.livelyV1));

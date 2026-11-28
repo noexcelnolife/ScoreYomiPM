@@ -10,6 +10,7 @@
 // copyRotate は線形合成なので、copyRotate(θ) で傾けた画像に対し copyRotate(−θ)
 // で復元する。テストはこの丸め込み（round-trip）で符号規約を固定する。
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -191,13 +192,13 @@ void main() {
   group('RollCorrector.maybeUpright（正立化）', () {
     test('無傾きの実画像で null（補正不要・現行経路そのまま）', () async {
       final corrector = RollCorrector();
-      final file = File(_realImagePaths.first);
-      // WHY await なし: maybeUpright は同期シグネチャ（File? 返し）。失敗を
+      final bytes = File(_realImagePaths.first).readAsBytesSync();
+      // WHY await なし: maybeUpright は同期シグネチャ（Uint8List? 返し）。失敗を
       // null で返す契約のため Future にしない。
-      expect(corrector.maybeUpright(file), isNull);
+      expect(corrector.maybeUpright(bytes), isNull);
     }, skip: skipIfImagesMissing(<String>[_realImagePaths.first]));
 
-    test('強傾きの合成画像で正立化ファイルを返し、再推定が ≈0', () async {
+    test('強傾きの合成画像で正立化バイト列を返し、再推定が ≈0', () async {
       final corrector = RollCorrector();
       // WHY cubic: 最近傍回転はストライプを階段状エッジに変え（局所勾配が垂直のまま）、
       // 実カメラの連続回転と乖離する。傾き生成は必ず連続補間で行う。
@@ -206,46 +207,24 @@ void main() {
         angle: 10,
         interpolation: img.Interpolation.cubic,
       );
-      final source = File(
-        '${Directory.systemTemp.path}/roll_test_tilted_${DateTime.now().microsecondsSinceEpoch}.png',
-      );
-      await source.writeAsBytes(img.encodePng(tilted));
-      addTearDown(() {
-        if (source.existsSync()) {
-          source.deleteSync();
-        }
-      });
+      final source = img.encodePng(tilted);
 
-      // WHY await なし: maybeUpright は同期シグネチャ（File? 返し）。
-      final uprightFile = corrector.maybeUpright(source);
-      expect(uprightFile, isNotNull);
-      addTearDown(() {
-        if (uprightFile != null && uprightFile.existsSync()) {
-          uprightFile.deleteSync();
-        }
-      });
+      // WHY await なし: maybeUpright は同期シグネチャ（Uint8List? 返し）。
+      final uprightBytes = corrector.maybeUpright(source);
+      expect(uprightBytes, isNotNull);
 
       // 正立化結果を再推定して ≈0（丸め込み完成）。
-      final bytes = await uprightFile!.readAsBytes();
-      final uprightImage = img.decodeImage(bytes);
+      final uprightImage = img.decodeImage(uprightBytes!);
       expect(uprightImage, isNotNull);
       final reEstimate = corrector.estimate(uprightImage!);
       expect(reEstimate, isNotNull);
       expect(reEstimate!.angleDeg, closeTo(0, 1.0));
     });
 
-    test('壊れたファイルで null（例外を握って fail-safe）', () async {
+    test('壊れたバイト列で null（例外を握って fail-safe）', () async {
       final corrector = RollCorrector();
-      final broken = File(
-        '${Directory.systemTemp.path}/roll_test_broken_${DateTime.now().microsecondsSinceEpoch}.jpg',
-      );
-      await broken.writeAsBytes(<int>[0x00, 0x01, 0x02]);
-      addTearDown(() {
-        if (broken.existsSync()) {
-          broken.deleteSync();
-        }
-      });
-      // WHY await なし: maybeUpright は同期シグネチャ（File? 返し）。
+      final broken = Uint8List.fromList(<int>[0x00, 0x01, 0x02]);
+      // WHY await なし: maybeUpright は同期シグネチャ（Uint8List? 返し）。
       expect(corrector.maybeUpright(broken), isNull);
     });
   });

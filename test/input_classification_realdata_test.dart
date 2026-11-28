@@ -69,7 +69,7 @@ void main() {
       final misclassified = <String>[];
       for (final file in jpgFiles) {
         final id = _extractId(file);
-        final actual = preprocessor.classify(file);
+        final actual = preprocessor.classify(file.readAsBytesSync());
         if (actual != InputImageClass.landscapePlayShare) {
           misclassified.add('$id (${file.path}): $actual');
         }
@@ -95,7 +95,7 @@ void main() {
           misclassified.add('$id: ファイルが存在しません');
           continue;
         }
-        final actual = preprocessor.classify(file);
+        final actual = preprocessor.classify(file.readAsBytesSync());
         if (actual != InputImageClass.portraitWithEmbedded) {
           misclassified.add('$id: 期待 portraitWithEmbedded, 実際 $actual');
         }
@@ -127,7 +127,7 @@ void main() {
       final misclassified = <String>[];
       for (final file in jpgFiles) {
         final id = file.uri.pathSegments.last;
-        final actual = preprocessor.classify(file);
+        final actual = preprocessor.classify(file.readAsBytesSync());
         if (actual != InputImageClass.arcadeResultFrame) {
           misclassified.add('$id (${file.path}): $actual');
         }

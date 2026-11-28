@@ -382,8 +382,9 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 対象種別。null のときは ST-1 自動分類のみでレイアウトを決定する（共有
   /// インテント経由 = 現行挙動完全不変・裁定 A）。
   Future<_OcrRunOutcome> _runOcr(
-    File imageFile, {
+    Uint8List imageBytes, {
     InputLayoutHint? layoutHint,
+    String? sourcePath,
   }) async {
     // WHY(#13 フォローアップ・検収裁定 2026-11-23): pipeline 側は毎 run で
     // MergedSongRepository を再構築するため、ライブ検索の辞書キャッシュも
@@ -398,8 +399,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     try {
       final OcrPipelineContext context = await pipeline.run(
-        imageFile,
+        imageBytes,
         layoutHint: layoutHint,
+        sourcePath: sourcePath,
       );
       final OcrPageResult? pageResult = context.pageResult;
       if (pageResult == null) {
@@ -419,7 +421,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // FR-4: OCR 実行系の失敗のみ、画像を失わないよう未確定レコードとして
       // 自動保存する（設計書 §4 フロー 2）。想定外のエラーは従来どおり
       // メッセージ表示のみとする。
-      await _savePendingOnFailure(await imageFile.readAsBytes());
+      await _savePendingOnFailure(imageBytes);
       return _OcrRunOutcome.failure('OCRの実行に失敗しました: ${error.message}');
     } catch (error) {
       // WHY: PoC では想定外の例外も握りつぶさず、エラーカードへ出して
@@ -467,18 +469,23 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 非 null。共有インテント経由（_handleSharedImage）は null を渡す（裁定 A）。
   /// v5 機能 A: [initialMachine] も種別選択シート経由のみ非 null（裁定 A 踏襲）。
   Future<void> _runOcrAndNavigate(
-    File imageFile, {
+    Uint8List imageBytes, {
     InputLayoutHint? layoutHint,
     String? initialMachine,
+    String? sourcePath,
   }) async {
     setState(() {
-      _selectedImage = imageFile;
+      // WHY(File に戻すか): ホームのプレビューは Image.file で描いており、
+      // その Web 対応はこのタスクの範囲外（OCR-D は入力経路のバイト列化まで）。
+      // パスを持たない入力ではプレビューを出さない。
+      _selectedImage = sourcePath == null ? null : File(sourcePath);
       _phase = _HomePhase.running;
       _errorMessage = null;
     });
     final _OcrRunOutcome outcome = await _runOcr(
-      imageFile,
+      imageBytes,
       layoutHint: layoutHint,
+      sourcePath: sourcePath,
     );
     if (!mounted) {
       return;
@@ -502,7 +509,8 @@ class _HomeScreenState extends State<HomeScreen> {
           // WHY(ここで読まないか): 原画像の読み込みは実 I/O。遷移の直前に
           // await すると、画面が出るまでディスク待ちになる。読むのは遷移先
           // （プレビュー表示と保存の直前）に任せ、関数だけ渡す。
-          loadImageBytes: imageFile.readAsBytes,
+          // 入力はすでにバイト列なので、読み直しではなく同じ値を渡すだけ。
+          loadImageBytes: () async => imageBytes,
           pageResult: pageResult,
           extractionResult: outcome.extractionResult,
           songMatchResult: outcome.songMatchResult,
@@ -611,8 +619,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     final File imageFile = File(picked.path);
     // WHY(v5 機能 A): シートで選ばれた機種だけを OCR 画面の初期値へ渡す。
+    // 原画像はここで1度だけ読み、以降はバイト列で運ぶ（OCR の入力契約）。
     await _runOcrAndNavigate(
-      imageFile,
+      await imageFile.readAsBytes(),
+      sourcePath: imageFile.path,
       layoutHint: layoutHint,
       initialMachine: machine,
     );
@@ -650,7 +660,8 @@ class _HomeScreenState extends State<HomeScreen> {
           return;
         }
         await _runOcrAndNavigate(
-          File(path),
+          await File(path).readAsBytes(),
+          sourcePath: path,
           layoutHint: layoutHint,
           initialMachine: machine,
         );
@@ -678,7 +689,8 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       final File imageFile = File(picked.path);
       await _runOcrAndNavigate(
-        imageFile,
+        await imageFile.readAsBytes(),
+        sourcePath: imageFile.path,
         layoutHint: layoutHint,
         initialMachine: machine,
       );
@@ -716,7 +728,10 @@ class _HomeScreenState extends State<HomeScreen> {
   /// hint なし（自動分類）のまま。テスト home_screen_species_sheet_test.dart が
   /// この不変条件を固定する。
   Future<void> _handleSharedImage(File imageFile) async {
-    await _runOcrAndNavigate(imageFile);
+    await _runOcrAndNavigate(
+      await imageFile.readAsBytes(),
+      sourcePath: imageFile.path,
+    );
   }
 
   /// バックアップ画面を開く（タスク 01a20c14）。

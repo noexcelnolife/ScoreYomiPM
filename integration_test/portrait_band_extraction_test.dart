@@ -87,8 +87,9 @@ Future<void> main() async {
       final origH = decodedOriginal.height;
 
       final preprocessor = InputPreprocessor();
-      final classified = preprocessor.classify(file);
-      final result = await preprocessor.preprocess(file);
+      final sourceBytes = file.readAsBytesSync();
+      final classified = preprocessor.classify(sourceBytes);
+      final result = await preprocessor.preprocess(sourceBytes);
 
       final problems = <String>[];
       if (classified != InputImageClass.portraitWithEmbedded) {
@@ -117,9 +118,7 @@ Future<void> main() async {
         problems.add('aspectValid=false（帯アスペクト ≒1.5 不成立）');
       }
 
-      final decodedCrop = img.decodePng(
-        await result.preprocessedFile.readAsBytes(),
-      );
+      final decodedCrop = img.decodePng(result.preprocessedBytes);
       if (decodedCrop == null) {
         problems.add('クロップ画像デコード失敗');
       } else {

@@ -99,8 +99,7 @@ void main() {
       );
 
       // Act
-      final context = await pipeline.run(
-        file,
+      final context = await pipeline.run(file.readAsBytesSync(),
         layoutHint: InputLayoutHint.acV1,
       );
 
@@ -117,8 +116,7 @@ void main() {
       final file = File('testimage/AC-HC-photo/HE8eMwTb0AAwJOV.jpg');
 
       // Act
-      final context = await pipeline.run(
-        file,
+      final context = await pipeline.run(file.readAsBytesSync(),
         layoutHint: InputLayoutHint.hcV1,
       );
 
@@ -137,8 +135,7 @@ void main() {
       );
 
       // Act
-      final context = await pipeline.run(
-        file,
+      final context = await pipeline.run(file.readAsBytesSync(),
         layoutHint: InputLayoutHint.hcV1,
       );
 
@@ -155,8 +152,7 @@ void main() {
       final file = File('testimage/AC-HC-photo/HE8eMwTb0AAwJOV.jpg');
 
       // Act
-      final context = await pipeline.run(
-        file,
+      final context = await pipeline.run(file.readAsBytesSync(),
         layoutHint: InputLayoutHint.acV1,
       );
 
@@ -173,7 +169,7 @@ void main() {
       final file = File('testimage/AC-HC-photo/HE8eMwTb0AAwJOV.jpg');
 
       // Act
-      final context = await pipeline.run(file);
+      final context = await pipeline.run(file.readAsBytesSync());
 
       // Assert（hint 未指定は分類由来のレイアウト・フラグは立たない）
       expect(context.layoutHint, isNull);
@@ -192,7 +188,7 @@ void main() {
         );
 
         // Act
-        final context = await pipeline.run(file);
+        final context = await pipeline.run(file.readAsBytesSync());
 
         // Assert
         expect(context.layoutHint, isNull);
@@ -208,8 +204,7 @@ void main() {
       final file = File('testimage/playshare/Screenshot_20261122-124336.png');
 
       // Act
-      final context = await pipeline.run(
-        file,
+      final context = await pipeline.run(file.readAsBytesSync(),
         layoutHint: InputLayoutHint.hcV1,
       );
 

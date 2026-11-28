@@ -353,16 +353,16 @@ void main() {
       );
       final engine = _FakeOcrEngine(result: pageResult);
       final pipeline = OcrPipeline(engine: engine);
-      final imageFile = createTestImageFile();
+      final imageBytes = createTestImageBytes();
 
-      final context = await pipeline.run(imageFile);
+      final context = await pipeline.run(imageBytes);
 
       expect(engine.callCount, 1);
       // WHY(バイト列を検証するか): エンジンの契約がバイト列入力になったため、
       // パイプラインが画像バイト列を渡していることだけを見る。
       expect(engine.lastImageBytes, isNotNull);
       expect(context.pageResult, equals(pageResult));
-      expect(context.imageFile, same(imageFile));
+      expect(context.imageBytes, same(imageBytes));
       // Step 0 で接続済み（タスク 01a20108）: 寸法つきの結果から
       // FieldExtractor によるフィールド化結果が設定される。
       expect(context.extractionResult, isNotNull);
@@ -386,7 +386,7 @@ void main() {
       );
       final pipeline = OcrPipeline(engine: engine);
 
-      final context = await pipeline.run(createTestImageFile());
+      final context = await pipeline.run(createTestImageBytes());
 
       expect(context.pageResult, isNotNull);
       expect(context.extractionResult, isNull);
@@ -399,19 +399,19 @@ void main() {
       final pipeline = OcrPipeline(engine: engine);
 
       await expectLater(
-        pipeline.run(createTestImageFile()),
+        pipeline.run(createTestImageBytes()),
         throwsA(isA<OcrEngineException>()),
       );
     });
   });
 
   group('OcrPipelineContext', () {
-    test('imageFile を保持し、pageResult / extractionResult の初期値は null', () {
-      final imageFile = createTestImageFile();
+    test('imageBytes を保持し、pageResult / extractionResult の初期値は null', () {
+      final imageBytes = createTestImageBytes();
 
-      final context = OcrPipelineContext(imageFile: imageFile);
+      final context = OcrPipelineContext(imageBytes: imageBytes);
 
-      expect(context.imageFile, same(imageFile));
+      expect(context.imageBytes, same(imageBytes));
       expect(context.pageResult, isNull);
       expect(context.extractionResult, isNull);
     });
@@ -424,7 +424,7 @@ void main() {
       );
       const updated = OcrPageResult(elements: [element], fullText: 'オルビス');
 
-      final context = OcrPipelineContext(imageFile: createTestImageFile());
+      final context = OcrPipelineContext(imageBytes: createTestImageBytes());
       context.pageResult = updated;
 
       expect(context.pageResult, equals(updated));

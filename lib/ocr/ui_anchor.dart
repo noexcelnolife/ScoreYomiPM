@@ -15,7 +15,6 @@
 library;
 
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
@@ -93,7 +92,7 @@ class AnchorRegistration {
   /// [id] のヒット（無ければ null）。
   AnchorHit? hitOf(String id) => hits[id];
 
-  /// [imageFile]（前処理後画像）からアンカーを検出する。
+  /// [imageBytes]（前処理後画像のエンコード済みバイト列）からアンカーを検出する。
   ///
   /// デコード失敗時は null（呼び出し側はアンカーなし = 現行動作・機能 OFF）。
   /// 各アンカーのスコアが named 定数（_nccScoreThreshold /
@@ -101,13 +100,11 @@ class AnchorRegistration {
   /// AnchorDefinition.threshold はこの定数群のミラー（生成ツールが書き込み、
   /// asset 契約テストで一致を固定する）で、実行時ゲートは本定数で固定する
   ///（受け入れ条件②・呼び出し側のゲート再評価と二重化・設計 §6）。
-  static AnchorRegistration? detect(File imageFile, AnchorPack pack) {
-    // WHY try で読み込みも覆う: 呼び出し契約は「検出不能なら null」であり、
-    // ファイルが存在しない/読めない場合も機能 OFF に落ちるべき
-    //（既存テストが実在しないプレースホルダ File を渡すケースを含む）。
+  static AnchorRegistration? detect(Uint8List imageBytes, AnchorPack pack) {
+    // WHY try でデコードも覆う: 呼び出し契約は「検出不能なら null」であり、
+    // 壊れた画像や未対応形式でも機能 OFF に落ちるべき。
     try {
-      final bytes = imageFile.readAsBytesSync();
-      final image = img.decodeImage(bytes);
+      final image = img.decodeImage(imageBytes);
       if (image == null) {
         return null;
       }

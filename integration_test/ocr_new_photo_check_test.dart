@@ -63,7 +63,7 @@ void main() {
 
           final watch = Stopwatch()..start();
           final context = await pipeline.run(
-            file,
+            file.readAsBytesSync(),
             layoutHint: InputLayoutHint.acV1,
           );
           watch.stop();

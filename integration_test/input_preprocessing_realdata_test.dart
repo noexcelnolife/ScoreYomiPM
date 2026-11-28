@@ -152,7 +152,7 @@ void main() {
 
       final misclassified = <String>[];
       for (final file in jpgFiles) {
-        final actual = preprocessor.classify(file);
+        final actual = preprocessor.classify(file.readAsBytesSync());
         if (actual != InputImageClass.landscapePlayShare) {
           misclassified.add('${file.uri.pathSegments.last}: $actual');
         }
@@ -171,7 +171,7 @@ void main() {
       for (final id in _scrIds) {
         final file = File(_scrPath(id));
         expect(file.existsSync(), isTrue, reason: '$id: ファイルが存在しません');
-        final actual = preprocessor.classify(file);
+        final actual = preprocessor.classify(file.readAsBytesSync());
         if (actual != InputImageClass.portraitWithEmbedded) {
           misclassified.add('$id: 期待 portraitWithEmbedded, 実際 $actual');
         }
@@ -214,7 +214,7 @@ void main() {
         final gt = gtMap[id]!;
 
         // 分類検証
-        final cls = preprocessor.classify(file);
+        final cls = preprocessor.classify(file.readAsBytesSync());
         expect(
           cls,
           equals(InputImageClass.portraitWithEmbedded),
@@ -222,14 +222,14 @@ void main() {
         );
 
         // パイプライン実行（preProcess + fieldOcr）
-        final context = await pipeline.run(file);
+        final context = await pipeline.run(file.readAsBytesSync());
         final extractionResult = context.extractionResult;
 
-        // 前処理ファイルが生成されていることを確認
+        // 前処理結果が保持されていることを確認
         expect(
-          context.preprocessedImageFile,
+          context.preprocessedImageBytes,
           isNotNull,
-          reason: '$id: preprocessedImageFile が null',
+          reason: '$id: preprocessedImageBytes が null',
         );
 
         _report('\n--- $id ---');
@@ -316,14 +316,14 @@ void main() {
       _report('\n=== ST-1 既存30枚 JPG パイプライン有効抽出率（クロップ解像度比較用） ===');
 
       for (final file in jpgFiles) {
-        final cls = preprocessor.classify(file);
+        final cls = preprocessor.classify(file.readAsBytesSync());
         expect(
           cls,
           equals(InputImageClass.landscapePlayShare),
           reason: '${file.uri.pathSegments.last}: 分類エラー',
         );
 
-        final context = await pipeline.run(file);
+        final context = await pipeline.run(file.readAsBytesSync());
         final extractionResult = context.extractionResult;
 
         for (final fieldName in fieldNames) {

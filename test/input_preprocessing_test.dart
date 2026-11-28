@@ -1,7 +1,7 @@
 // ST-1 前処理 TDD テスト。
 // 合成フィクスチャ（動的生成小画像）で分類・矩形検出・回転・クロップを検証。
 // 実データ分類の回帰ガードは test/input_classification_realdata_test.dart。
-import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -32,14 +32,11 @@ img.Image _makeTestImage({
   return image;
 }
 
-File _writeTempImage(img.Image image, {String suffix = '.png'}) {
-  final tmpDir = Directory.systemTemp;
-  final tmpFile = File(
-    '${tmpDir.path}/scoreyomipm_test_${DateTime.now().millisecondsSinceEpoch}$suffix',
-  );
-  tmpFile.writeAsBytesSync(img.encodePng(image));
-  return tmpFile;
-}
+/// 合成画像を PNG バイト列にする。
+///
+/// WHY ファイルに書かないか: 前処理の入出力はどちらもバイト列。一時ファイルを
+/// 挟むと「テストが落ちたとき temp に残る」失敗モードだけが増える。
+Uint8List _imageBytes(img.Image image) => img.encodePng(image);
 
 void main() {
   group('InputPreprocessor.classify', () {
@@ -53,10 +50,10 @@ void main() {
           (_) => List.filled(1620, ui.Color.fromARGB(255, 150, 150, 150)),
         );
         final image = _makeTestImage(width: 1620, height: 1080, pixels: pixels);
-        final file = _writeTempImage(image);
+        final bytes = _imageBytes(image);
 
         final preprocessor = InputPreprocessor();
-        final result = preprocessor.classify(file);
+        final result = preprocessor.classify(bytes);
 
         expect(result, equals(InputImageClass.landscapePlayShare));
       },
@@ -68,10 +65,10 @@ void main() {
         (_) => List.filled(1080, ui.Color.fromARGB(255, 255, 255, 255)),
       );
       final image = _makeTestImage(width: 1080, height: 2400, pixels: pixels);
-      final file = _writeTempImage(image);
+      final bytes = _imageBytes(image);
 
       final preprocessor = InputPreprocessor();
-      final result = preprocessor.classify(file);
+      final result = preprocessor.classify(bytes);
 
       expect(result, equals(InputImageClass.portraitWithEmbedded));
     });
@@ -99,10 +96,10 @@ void main() {
         height: height,
         pixels: pixels,
       );
-      final file = _writeTempImage(image);
+      final bytes = _imageBytes(image);
 
       final preprocessor = InputPreprocessor();
-      final result = preprocessor.classify(file);
+      final result = preprocessor.classify(bytes);
 
       expect(result, equals(InputImageClass.rotatedPortrait));
     });
@@ -115,17 +112,19 @@ void main() {
         (_) => List.filled(150, ui.Color.fromARGB(255, 150, 150, 150)),
       );
       final image = _makeTestImage(width: 150, height: 100, pixels: pixels);
-      final file = _writeTempImage(image);
+      final bytes = _imageBytes(image);
 
       final preprocessor = InputPreprocessor();
-      final result = preprocessor.classify(file);
+      final result = preprocessor.classify(bytes);
 
       expect(result, equals(InputImageClass.landscapePlayShare));
     });
 
-    test('ファイル読み込み失敗時は landscapePlayShare にフォールバック', () {
+    test('デコード不能なバイト列では landscapePlayShare にフォールバック', () {
       final preprocessor = InputPreprocessor();
-      final result = preprocessor.classify(File('nonexistent.png'));
+      final result = preprocessor.classify(
+        Uint8List.fromList(<int>[0x00, 0x01, 0x02]),
+      );
 
       expect(result, equals(InputImageClass.landscapePlayShare));
     });
@@ -157,18 +156,20 @@ void main() {
         height: height,
         pixels: pixels,
       );
-      final file = _writeTempImage(image);
+      final bytes = _imageBytes(image);
 
       final preprocessor = InputPreprocessor();
-      final result = await preprocessor.preprocess(file);
+      final result = await preprocessor.preprocess(bytes);
 
       expect(result.inputClass, equals(InputImageClass.rotatedPortrait));
-      expect(result.preprocessedFile.path, isNot(equals(file.path)));
+      // WHY(same でないこと): 前処理は画像を加工して PNG に再エンコードする。
+      // 入力バイト列がそのまま返ってきたら前処理が効いていない。
+      expect(result.preprocessedBytes, isNot(same(bytes)));
 
-      // 出力ファイルをデコードして、CCW回転により縦長（h > w）になっていることを確認。
+      // 出力をデコードして、CCW回転により縦長（h > w）になっていることを確認。
       // もし CW (+90) 回転だと、2400x1080 → 1080x2400 にもなるが、
       // 内容の向きが違う。ここでは単純にh>wを確認。
-      final outputBytes = await result.preprocessedFile.readAsBytes();
+      final outputBytes = result.preprocessedBytes;
       final outputImage = img.decodeImage(outputBytes);
       expect(outputImage, isNotNull);
 
@@ -183,19 +184,21 @@ void main() {
   });
 
   group('InputPreprocessor.preprocess', () {
-    test('landscapePlayShare: 前処理なしで元ファイルを返す', () async {
+    test('landscapePlayShare: 前処理なしで入力バイト列をそのまま返す', () async {
       final pixels = List.generate(
         1080,
         (_) => List.filled(1620, ui.Color.fromARGB(255, 150, 150, 150)),
       );
       final image = _makeTestImage(width: 1620, height: 1080, pixels: pixels);
-      final file = _writeTempImage(image);
+      final bytes = _imageBytes(image);
 
       final preprocessor = InputPreprocessor();
-      final result = await preprocessor.preprocess(file);
+      final result = await preprocessor.preprocess(bytes);
 
       expect(result.inputClass, equals(InputImageClass.landscapePlayShare));
-      expect(result.preprocessedFile.path, equals(file.path));
+      // WHY(same): 前処理不要の経路はバイト列をそのまま後段へ渡す（再エンコード
+      // による劣化も、無駄なメモリ確保もしない）。
+      expect(result.preprocessedBytes, same(bytes));
       expect(result.embeddedRect, isNull);
       expect(result.aspectRatioValid, isTrue);
     });
@@ -230,10 +233,10 @@ void main() {
         height: height,
         pixels: pixels,
       );
-      final file = _writeTempImage(image);
+      final bytes = _imageBytes(image);
 
       final preprocessor = InputPreprocessor();
-      final result = await preprocessor.preprocess(file);
+      final result = await preprocessor.preprocess(bytes);
 
       expect(result.inputClass, equals(InputImageClass.portraitWithEmbedded));
       // 全幅帯矩形（x バウンダリを捨ててレターボックス全幅を採る）。
@@ -245,7 +248,7 @@ void main() {
       expect(result.aspectRatioValid, isTrue);
       // クロップ後は横長（レイアウト正規化）。
       final decoded = img.decodeImage(
-        await result.preprocessedFile.readAsBytes(),
+        result.preprocessedBytes,
       );
       expect(decoded, isNotNull);
       expect(decoded!.width, equals(1080));
@@ -286,10 +289,10 @@ void main() {
         height: height,
         pixels: pixels,
       );
-      final file = _writeTempImage(image);
+      final bytes = _imageBytes(image);
 
       final preprocessor = InputPreprocessor();
-      final result = await preprocessor.preprocess(file);
+      final result = await preprocessor.preprocess(bytes);
 
       expect(result.inputClass, equals(InputImageClass.portraitWithEmbedded));
       // 干渉 run（48-96px）ではなく写真帯 720px が選ばれる。
@@ -331,10 +334,10 @@ void main() {
         height: height,
         pixels: pixels,
       );
-      final file = _writeTempImage(image);
+      final bytes = _imageBytes(image);
 
       final preprocessor = InputPreprocessor();
-      final result = await preprocessor.preprocess(file);
+      final result = await preprocessor.preprocess(bytes);
 
       expect(result.inputClass, equals(InputImageClass.portraitWithEmbedded));
       // フォールバック: 従来検出の bounding box（UI run も含む全範囲）。
@@ -345,7 +348,7 @@ void main() {
       expect(result.aspectRatioValid, isFalse);
       // クロップは帯の断片ではなく従来どおりの大型矩形（h > w）。
       final decoded = img.decodeImage(
-        await result.preprocessedFile.readAsBytes(),
+        result.preprocessedBytes,
       );
       expect(decoded, isNotNull);
       expect(decoded!.height, greaterThan(decoded.width));
@@ -366,16 +369,16 @@ void main() {
         height: height,
         pixels: pixels,
       );
-      final file = _writeTempImage(image);
+      final bytes = _imageBytes(image);
 
       final preprocessor = InputPreprocessor();
-      final result = await preprocessor.preprocess(file);
+      final result = await preprocessor.preprocess(bytes);
 
       expect(result.inputClass, equals(InputImageClass.portraitWithEmbedded));
       expect(result.embeddedRect, isNull);
       expect(result.aspectRatioValid, isTrue);
       final decoded = img.decodeImage(
-        await result.preprocessedFile.readAsBytes(),
+        result.preprocessedBytes,
       );
       expect(decoded, isNotNull);
       expect(decoded!.width, equals(1080));
@@ -405,17 +408,17 @@ void main() {
         height: height,
         pixels: pixels,
       );
-      final file = _writeTempImage(image);
+      final bytes = _imageBytes(image);
 
       final preprocessor = InputPreprocessor();
-      final result = await preprocessor.preprocess(file);
+      final result = await preprocessor.preprocess(bytes);
 
       expect(result.inputClass, equals(InputImageClass.rotatedPortrait));
-      expect(result.preprocessedFile.path, isNot(equals(file.path)));
-      expect(await result.preprocessedFile.exists(), isTrue);
+      expect(result.preprocessedBytes, isNot(same(bytes)));
+      expect(result.preprocessedBytes, isNotEmpty);
 
       final decoded = img.decodeImage(
-        await result.preprocessedFile.readAsBytes(),
+        result.preprocessedBytes,
       );
       expect(decoded, isNotNull);
       if (decoded != null) {
@@ -442,10 +445,10 @@ void main() {
         height: height,
         pixels: pixels,
       );
-      final file = _writeTempImage(image);
+      final bytes = _imageBytes(image);
 
       final preprocessor = InputPreprocessor();
-      final result = await preprocessor.preprocess(file);
+      final result = await preprocessor.preprocess(bytes);
 
       expect(result.inputClass, equals(InputImageClass.arcadeResultFrame));
       expect(result.aspectRatioValid, isTrue);

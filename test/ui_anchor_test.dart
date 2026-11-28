@@ -12,7 +12,6 @@
 //   実装の数値契約を守る役割）。
 // 実装 lib/ocr/ui_anchor.dart が存在しないため、現状は RED（コンパイルエラー）。
 
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -85,18 +84,11 @@ UiAnchorTemplate _templateFrom(
   return UiAnchorTemplate(width: w, height: h, gray: gray);
 }
 
-/// 合成画像を一時 PNG ファイルに書き出す（teardown で削除）。
-Future<File> _writeTempPng(img.Image image) async {
-  final dir = await Directory.systemTemp.createTemp('ui_anchor_test');
-  addTearDown(() {
-    if (dir.existsSync()) {
-      dir.deleteSync(recursive: true);
-    }
-  });
-  final file = File('${dir.path}/img.png');
-  file.writeAsBytesSync(img.encodePng(image));
-  return file;
-}
+/// 合成画像を PNG バイト列にする。
+///
+/// WHY ファイルに書かないか: 検出器の入力はバイト列。一時ファイルを作ると
+/// 「テストが落ちたとき temp に残る」失敗モードだけが増える。
+Uint8List _pngBytes(img.Image image) => img.encodePng(image);
 
 AnchorPack _pack({
   required List<AnchorDefinition> definitions,
@@ -137,7 +129,7 @@ void main() {
     _drawPattern(full, 160, 60, 32, 20);
     final small = _downscaled(full);
     final template = _templateFrom(small, 40, 15, 14, 9);
-    final file = await _writeTempPng(full);
+    final bytes = _pngBytes(full);
 
     final pack = _pack(
       definitions: [
@@ -152,7 +144,7 @@ void main() {
       templates: {'gauge.png': template},
     );
 
-    final registration = AnchorRegistration.detect(file, pack);
+    final registration = AnchorRegistration.detect(bytes, pack);
     final hit = registration!.hitOf('gaugeHeader');
     expect(hit, isNotNull);
     expect(hit!.score, greaterThanOrEqualTo(0.90));
@@ -171,7 +163,7 @@ void main() {
 
     final full = _flatImage(320, 200);
     _drawPattern(full, 192, 84, 32, 20);
-    final file = await _writeTempPng(full);
+    final bytes = _pngBytes(full);
 
     final pack = _pack(
       definitions: [
@@ -186,7 +178,7 @@ void main() {
       templates: {'gauge.png': template},
     );
 
-    final registration = AnchorRegistration.detect(file, pack);
+    final registration = AnchorRegistration.detect(bytes, pack);
     final hit = registration!.hitOf('gaugeHeader');
     expect(hit, isNotNull);
     expect(hit!.score, greaterThanOrEqualTo(0.80));
@@ -195,7 +187,7 @@ void main() {
   });
 
   test('NCC: 無地画像ではヒットしない（分散 0 は score 0 扱い・閾値未満）', () async {
-    final file = await _writeTempPng(_flatImage(320, 200));
+    final bytes = _pngBytes(_flatImage(320, 200));
     final pack = _pack(
       definitions: [
         const AnchorDefinition(
@@ -216,7 +208,7 @@ void main() {
       },
     );
 
-    final registration = AnchorRegistration.detect(file, pack);
+    final registration = AnchorRegistration.detect(bytes, pack);
     expect(registration, isNotNull);
     expect(registration!.hitOf('gaugeHeader'), isNull);
   });
@@ -229,7 +221,7 @@ void main() {
         full.setPixelRgb(x, y, 200, 200, 200);
       }
     }
-    final file = await _writeTempPng(full);
+    final bytes = _pngBytes(full);
 
     final pack = _pack(
       definitions: [
@@ -242,7 +234,7 @@ void main() {
       ],
     );
 
-    final registration = AnchorRegistration.detect(file, pack);
+    final registration = AnchorRegistration.detect(bytes, pack);
     final hit = registration!.hitOf('frameRight');
     expect(hit, isNotNull);
     // 列強度 |dx| = 200-60 = 140 → 140/255 ≈ 0.549。
@@ -253,7 +245,7 @@ void main() {
   });
 
   test('columnEdge: 縦線のない画像では null', () async {
-    final file = await _writeTempPng(_flatImage(320, 200));
+    final bytes = _pngBytes(_flatImage(320, 200));
     final pack = _pack(
       definitions: [
         const AnchorDefinition(
@@ -265,7 +257,7 @@ void main() {
       ],
     );
 
-    final registration = AnchorRegistration.detect(file, pack);
+    final registration = AnchorRegistration.detect(bytes, pack);
     expect(registration, isNotNull);
     expect(registration!.hitOf('frameRight'), isNull);
   });
@@ -273,7 +265,7 @@ void main() {
   test('detect: 成立しないアンカーは hits から漏れ、成立したものだけ入る', () async {
     final full = _flatImage(320, 200);
     _drawPattern(full, 160, 60, 32, 20); // gaugeHeader 位置にのみ模様。
-    final file = await _writeTempPng(full);
+    final bytes = _pngBytes(full);
     final canonicalFull = _flatImage(320, 200);
     _drawPattern(canonicalFull, 160, 60, 32, 20);
     final template = _templateFrom(_downscaled(canonicalFull), 40, 15, 14, 9);
@@ -302,13 +294,13 @@ void main() {
       },
     );
 
-    final registration = AnchorRegistration.detect(file, pack);
+    final registration = AnchorRegistration.detect(bytes, pack);
     expect(registration!.hitOf('gaugeHeader'), isNotNull);
     expect(registration.hitOf('difficultyEx'), isNull);
   });
 
   test('detect: テンプレ未登録の NCC 定義はスキップされる（クラッシュしない）', () async {
-    final file = await _writeTempPng(_flatImage(320, 200));
+    final bytes = _pngBytes(_flatImage(320, 200));
     final pack = _pack(
       definitions: [
         const AnchorDefinition(
@@ -327,24 +319,17 @@ void main() {
       ],
     );
 
-    final registration = AnchorRegistration.detect(file, pack);
+    final registration = AnchorRegistration.detect(bytes, pack);
     expect(registration, isNotNull);
     expect(registration!.hitOf('gaugeHeader'), isNull);
     expect(registration.hitOf('frameRight'), isNull);
   });
 
-  test('detect: デコード不能なファイルでは null（機能 OFF 経路）', () async {
-    final dir = await Directory.systemTemp.createTemp('ui_anchor_test');
-    addTearDown(() {
-      if (dir.existsSync()) {
-        dir.deleteSync(recursive: true);
-      }
-    });
-    final file = File('${dir.path}/broken.png')
-      ..writeAsBytesSync(<int>[0, 1, 2, 3, 4]);
+  test('detect: デコード不能なバイト列では null（機能 OFF 経路）', () async {
+    final broken = Uint8List.fromList(<int>[0, 1, 2, 3, 4]);
 
     final pack = _pack(definitions: const []);
-    expect(AnchorRegistration.detect(file, pack), isNull);
+    expect(AnchorRegistration.detect(broken, pack), isNull);
   });
 
   test('asset 契約: assets/anchors/hc_v1 のパックが生成契約どおりに読める', () async {

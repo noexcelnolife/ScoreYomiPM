@@ -55,7 +55,7 @@ void main() {
       final counts = <String, int>{};
       try {
         for (final imageFile in imageFiles) {
-          final context = await pipeline.run(imageFile);
+          final context = await pipeline.run(imageFile.readAsBytesSync());
           final extraction = context.extractionResult;
           final record = _recordOf(imageFile.uri.pathSegments.last, extraction);
           _accumulate(counts, extraction);

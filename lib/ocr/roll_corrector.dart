@@ -7,7 +7,7 @@
 //
 // 角度推定方式: 勾配方位ヒストグラム（文書スキュー補正の標準手法・純 Dart・
 // 0.5 秒級）。既存 NCC 機構（ui_anchor.dart）を使った角度探索は候補角度ごとに
-// canonical 解像度での回転と File 再デコードが必要で 30 秒級になるため不採用。
+// canonical 解像度での回転と画像の再デコードが必要で 30 秒級になるため不採用。
 //
 // WHY 前段ブラー必須（2026-11-23 実測）: シャープな 1px エッジ（合成 PNG や
 // JPEG の鮮鋭な罫線）では中心差分の dx がほぼ 0 になり、勾配方向に傾き情報が
@@ -22,7 +22,6 @@
 // copyRotate(θ) 傾きの画像の勾配法線は φ=90°+θ となり、返す角度は −θ になる。
 // 符号は test/roll_corrector_test.dart の丸め込み（round-trip）テストで固定。
 
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -243,14 +242,17 @@ class RollCorrector {
     return RollEstimate(angleDeg: -deltaPeak, confidence: confidence);
   }
 
-  /// [source] が傾いていれば正立化した一時 JPEG を返す。
+  /// [sourceBytes] が傾いていれば正立化した JPEG バイト列を返す。
   ///
   /// 無傾き（|[RollEstimate.angleDeg]| < [correctThresholdDeg]）・推定不能・
-  /// 失敗のいずれでも null を返し、呼び出し元は元ファイルで続行する。
-  /// 戻り値ファイルの破棄責任は呼び出し元（パイプライン）にある。
-  File? maybeUpright(File source) {
+  /// 失敗のいずれでも null を返し、呼び出し元は元の画像で続行する。
+  ///
+  /// WHY ファイルではなくバイト列を返すか: Web には `dart:io` が無い。戻り値を
+  /// バイト列にすれば、呼び出し元が「受け取ったら消す」義務を負わない
+  /// （一時ファイルの破棄漏れという失敗モード自体が無くなる）。
+  Uint8List? maybeUpright(Uint8List sourceBytes) {
     try {
-      final image = img.decodeImage(source.readAsBytesSync());
+      final image = img.decodeImage(sourceBytes);
       if (image == null) {
         return null;
       }
@@ -272,12 +274,7 @@ class RollCorrector {
         angle: estimate.angleDeg,
         interpolation: img.Interpolation.cubic,
       );
-      final tempFile = File(
-        '${Directory.systemTemp.path}'
-        '/roll_upright_${DateTime.now().microsecondsSinceEpoch}.jpg',
-      );
-      tempFile.writeAsBytesSync(img.encodeJpg(rotated, quality: 92));
-      return tempFile;
+      return img.encodeJpg(rotated, quality: 92);
     } catch (_) {
       // WHY fail-safe: 補正経路のいかなる失敗も現行動作（無補正）へフォール
       // バックさせる（設計 §3・遮断しない）。

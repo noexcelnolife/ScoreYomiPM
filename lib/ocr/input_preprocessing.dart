@@ -1,13 +1,16 @@
 /* ST-1 前処理：縦スクリーンショット対応（spec.md §5.1）。
  *
  * 入力画像を 3 クラスに分類し、portraitWithEmbedded / rotatedPortrait の
- * 場合は埋め込みプレーシェア写真を矩形抽出・回転補正して正立ファイル
- * を出力する。landscapePlayShare の場合は前処理不要（既存経路そのまま）。
+ * 場合は埋め込みプレーシェア写真を矩形抽出・回転補正して正立画像を出力する。
+ * landscapePlayShare の場合は前処理不要（既存経路そのまま）。
  *
- * 画像は image パッケージでデコード・加工し、一時ファイルに再エンコード
- * して OcrPipeline に渡す。UI シグネチャは不変（lib/ocr 内完結）。
+ * 入出力はどちらもエンコード済みバイト列（PNG/JPEG）。画像は image パッケージで
+ * デコード・加工し、PNG で再エンコードして返す。
+ *
+ * WHY 一時ファイルを作らないか: Web には `dart:io` が無い。加えて、書いて読んで
+ * 消す往復は OCR 1 回ごとにディスク I/O を挟むだけで、消し忘れると temp が
+ * 溜まる。加工結果はそのままメモリで次段へ渡せる。
  */
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
@@ -51,20 +54,20 @@ class EmbeddedRect {
 
 /// 前処理結果。
 ///
-/// [inputClass] は分類結果。[preprocessedFile] は前処理後のファイルパス
-/// （landscapePlayShare の場合は元ファイルと同一パス）。
+/// [inputClass] は分類結果。[preprocessedBytes] は前処理後の画像バイト列
+/// （landscapePlayShare の場合は入力と同じバイト列をそのまま返す）。
 /// [embeddedRect] は検出された埋め込み写真のピクセル矩形（元画像座標系）。
 /// [aspectRatioValid] は検出矩形のアスペクト比が実プレーシェア
 /// （1200x800 前後≒1.5・実測 1.481-1.506）の ±10% 以内か。
 class PreprocessResult {
   final InputImageClass inputClass;
-  final File preprocessedFile;
+  final Uint8List preprocessedBytes;
   final EmbeddedRect? embeddedRect;
   final bool aspectRatioValid;
 
   PreprocessResult({
     required this.inputClass,
-    required this.preprocessedFile,
+    required this.preprocessedBytes,
     this.embeddedRect,
     this.aspectRatioValid = true,
   });
@@ -132,12 +135,7 @@ class InputPreprocessor {
   /// 分類コスト削減のため低解像度デコード（幅≤$_classifyMaxWidth px）を使用。
   /// 既存30枚（1200x800 前後・本物横プレーシェア）は end 部が暗くないため
   /// landscapePlayShare に分類され、前処理スキップで回帰ガードされる。
-  InputImageClass classify(File imageFile) {
-    final bytes = _readBytesSafely(imageFile);
-    if (bytes == null) {
-      // ファイル読み込み失敗時は landscapePlayShare とみなし、既存経路に任せる。
-      return InputImageClass.landscapePlayShare;
-    }
+  InputImageClass classify(Uint8List bytes) {
     final image = img.decodeImage(bytes);
     if (image == null) {
       // デコード失敗時は landscapePlayShare とみなし、既存経路に任せる。
@@ -181,37 +179,29 @@ class InputPreprocessor {
     return InputImageClass.landscapePlayShare;
   }
 
-  /// 前処理を実行し、前処理済みファイルを返す。
+  /// 前処理を実行し、前処理済み画像のバイト列を返す。
   ///
-  /// landscapePlayShare の場合は前処理なしで元ファイルを返す。
+  /// landscapePlayShare の場合は前処理なしで入力のバイト列をそのまま返す。
   /// portraitWithEmbedded / rotatedPortrait の場合は埋め込み写真を矩形抽出、
-  /// rotatedPortrait は90°CCW回転を適用し、一時ファイルに再エンコードして返す。
-  Future<PreprocessResult> preprocess(File imageFile) async {
+  /// rotatedPortrait は90°CCW回転を適用し、PNG に再エンコードして返す。
+  Future<PreprocessResult> preprocess(Uint8List bytes) async {
     // 分類は低解像度で実施。
-    final inputClass = classify(imageFile);
+    final inputClass = classify(bytes);
 
     if (inputClass == InputImageClass.landscapePlayShare) {
       return PreprocessResult(
         inputClass: inputClass,
-        preprocessedFile: imageFile,
+        preprocessedBytes: bytes,
         aspectRatioValid: true,
       );
     }
 
     // フル解像度デコード（前処理実行時のみ）。
-    final bytes = _readBytesSafely(imageFile);
-    if (bytes == null) {
-      return PreprocessResult(
-        inputClass: inputClass,
-        preprocessedFile: imageFile,
-        aspectRatioValid: false,
-      );
-    }
     final image = img.decodeImage(bytes);
     if (image == null) {
       return PreprocessResult(
         inputClass: inputClass,
-        preprocessedFile: imageFile,
+        preprocessedBytes: bytes,
         aspectRatioValid: false,
       );
     }
@@ -274,28 +264,13 @@ class InputPreprocessor {
       height: safeCrop.height,
     );
 
-    // 一時ファイルに再エンコード（PNG。JPEG 再圧縮による劣化を回避）。
-    final tmpDir = Directory.systemTemp;
-    final tmpFile = File(
-      '${tmpDir.path}/scoreyomipm_preprocessed_${DateTime.now().millisecondsSinceEpoch}.png',
-    );
-    await tmpFile.writeAsBytes(img.encodePng(cropped));
-
+    // PNG に再エンコード（JPEG 再圧縮による劣化を回避）。
     return PreprocessResult(
       inputClass: inputClass,
-      preprocessedFile: tmpFile,
+      preprocessedBytes: img.encodePng(cropped),
       embeddedRect: embeddedRect,
       aspectRatioValid: aspectValid,
     );
-  }
-
-  /// ファイルを安全に読み込む。失敗時は null を返す。
-  Uint8List? _readBytesSafely(File imageFile) {
-    try {
-      return imageFile.readAsBytesSync();
-    } on FileSystemException {
-      return null;
-    }
   }
 
   /// 端部（左/右）の平均輝度をサンプリングする。

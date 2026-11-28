@@ -3,7 +3,6 @@
 // 入力画像の分類・前処理 → フィールドOCR → 領域別OCR → 曲名辞書照合（ST-5/ST-6）
 // を統合するパイプライン。
 
-import 'dart:io';
 import 'dart:typed_data';
 
 import '../models/ocr_models.dart';
@@ -27,24 +26,33 @@ enum OcrPipelineStage { preProcess, fieldOcr, songMatching }
 
 /// OCR パイプラインの実行コンテキスト。
 class OcrPipelineContext {
-  /// 入力画像ファイル（ST-1.5 補正適用時は補正後ファイルへ差し替わる）。
+  /// OCR 対象画像のエンコード済みバイト列（PNG/JPEG）。
   ///
-  /// WHY 可変: ST-1.5 ロール補正（幾何補正 Phase 1・01a207fc）で正立化した
-  /// 一時ファイルへ差し替えたうえで後段ステージへ渡すため。補正なし経路は
-  /// 生成時の値のまま（現行挙動不変）。
-  File imageFile;
+  /// WHY 可変: ST-1.5 ロール補正（幾何補正 Phase 1・01a207fc）と ST-1 前処理
+  /// （刈り出し）で後段に渡す画素が差し替わるため。どちらも通らない経路は
+  /// run() に渡された値のまま（現行挙動不変）。
+  ///
+  /// WHY ファイルではなくバイト列か: Web には `dart:io` の File が無い。さらに
+  /// [OcrEngine] の入力契約もバイト列なので、間にファイルを挟むと
+  /// 「書く → 読む → 消す」の 3 手間が増えるだけで、消し忘れの温床にもなる。
+  Uint8List imageBytes;
 
-  /// 入力画像のエンコード済みバイト列（PNG/JPEG）。OCR エンジン（Uint8List
-  /// 入力）に渡す。run() で imageFile から 1 回だけ readAsBytes する（IO
-  /// 側の 1 箇所に寄せる。P3: OcrEngine の baryt入力化）。
-  Uint8List? imageBytes;
+  /// 入力画像の出所（表示・記録用）。
+  ///
+  /// WHY null 許容: Web ではクリップボード貼り付けや File System Access API の
+  /// ように、パスを持たない入力がある。
+  final String? sourcePath;
 
   /// ST-1 分類結果。fieldOcr でレイアウト種別（hc_v1 / ac_v1）と使用する
   /// アンカーパック版を決定するため保持する。
   InputImageClass? imageClass;
 
-  /// 前処理済み画像ファイル（PNG 再エンコード、temp ファイル）。
-  File? preprocessedImageFile;
+  /// 前処理済み画像のバイト列（PNG 再エンコード）。
+  ///
+  /// WHY 保持するか: アンカー検出は「pageResult を出したのと同じ画素」に対して
+  /// 行う必要がある（座標系を一致させるため）。一時ファイルではなくバイト列で
+  /// 持てば、その同一性が型で保証される。
+  Uint8List? preprocessedImageBytes;
 
   /// フルページ OCR 結果（生要素列）。
   OcrPageResult? pageResult;
@@ -100,7 +108,7 @@ class OcrPipelineContext {
   /// 分類由来。fieldOcr が寸法欠落でスキップされた場合は null のまま。
   LayoutKind? layoutKind;
 
-  OcrPipelineContext({required this.imageFile, this.imageBytes});
+  OcrPipelineContext({required this.imageBytes, this.sourcePath});
 }
 
 /// OCR パイプライン。
@@ -178,21 +186,9 @@ class OcrPipeline {
     return _anchorPackFuture ??= anchorPackLoader();
   }
 
-  /// 原画像をバイト列として読む。
+  /// 画像バイト列をパイプラインに流し、[OcrPipelineContext] を返す。
   ///
-  /// WHY(包むか): パイプラインの失敗契約は [OcrEngineException] で、呼び出し側
-  /// はそれを「OCR 失敗」として扱い原画像を未確定レコードに退避する。素の
-  /// [FileSystemException] を漏らすと「想定外のエラー」に落ちて画像が失われる。
-  /// 読めない原因（権限・削除済み・容量）は OCR 失敗と同じ扱いにする。
-  static Future<Uint8List> _readSourceBytes(File source) async {
-    try {
-      return await source.readAsBytes();
-    } on FileSystemException catch (error) {
-      throw OcrEngineException('原画像を読み込めませんでした: ${error.message}');
-    }
-  }
-
-  /// 画像ファイルをパイプラインに流し、[OcrPipelineContext] を返す。
+  /// [sourcePath] は入力の出所（表示・記録用）。処理には使わない。
   ///
   /// [layoutHint] は v3 種別選択フロー（docs/v3_input_source_flow_design_
   /// 2026-11-23.md §2・2026-11-23 ユーザー裁定済み）でユーザーが選択した
@@ -201,16 +197,15 @@ class OcrPipeline {
   /// [OcrPipelineContext.layoutMismatchFlag] に記録される（裁定 D・警告して
   /// 処理継続・遮断しない）。
   Future<OcrPipelineContext> run(
-    File imageFile, {
+    Uint8List imageBytes, {
     InputLayoutHint? layoutHint,
+    String? sourcePath,
   }) async {
-    final context = OcrPipelineContext(imageFile: imageFile);
+    final context = OcrPipelineContext(
+      imageBytes: imageBytes,
+      sourcePath: sourcePath,
+    );
     context.layoutHint = layoutHint;
-    // WHY(IO 層で 1 回だけ読むか): [OcrEngine] の入力契約をバイト列にした
-    // （P3）ため、ファイル読み出しの責務はパイプライン側へ移った。各段が
-    // それぞれ読み直すと、補正でファイルが差し替わったときに段ごとに別の
-    // 画素を見る危険がある。読み出しは入口 1 箇所に寄せる。
-    context.imageBytes = await _readSourceBytes(imageFile);
 
     // ST-1.5 ロール補正（幾何補正 Phase 1・01a207fc）。acV1 ヒント経路
     // （実機写真）のみ適用し、それ以外は現行挙動完全不変とする。
@@ -220,27 +215,20 @@ class OcrPipeline {
     // する一方、デジタル取り込み経路は無傾きのため補正不要。hint 無し経路
     // （共有インテント）は既存 30 画像ベンチとバイト等価を維持し回帰ゼロに
     // する（設計 §3）。
-    final correctedTemp = _applyRollCorrection(context);
-    if (correctedTemp != null) {
-      // 補正でファイルが差し替わった場合、バイト列も更新する（acV1 のみ）。
-      context.imageBytes = await _readSourceBytes(correctedTemp);
-    }
-    try {
-      for (final stage in _implementedStages) {
-        switch (stage) {
-          case OcrPipelineStage.preProcess:
-            await _runPreProcess(context);
-            break;
-          case OcrPipelineStage.fieldOcr:
-            await _runFieldOcr(context);
-            break;
-          case OcrPipelineStage.songMatching:
-            await _runSongMatching(context);
-            break;
-        }
+    _applyRollCorrection(context);
+
+    for (final stage in _implementedStages) {
+      switch (stage) {
+        case OcrPipelineStage.preProcess:
+          await _runPreProcess(context);
+          break;
+        case OcrPipelineStage.fieldOcr:
+          await _runFieldOcr(context);
+          break;
+        case OcrPipelineStage.songMatching:
+          await _runSongMatching(context);
+          break;
       }
-    } finally {
-      _deleteRollCorrectedTemp(correctedTemp, originalPath: imageFile.path);
     }
 
     return context;
@@ -248,36 +236,20 @@ class OcrPipeline {
 
   /// ST-1.5 ロール補正を適用する（acV1 ヒント時のみ）。
   ///
-  /// 戻り値は補正で作られた一時ファイル（補正なし・失敗時は null）。
-  /// 成功時は [OcrPipelineContext.imageFile] を補正後ファイルへ差し替える。
-  File? _applyRollCorrection(OcrPipelineContext context) {
+  /// 補正できたときは [OcrPipelineContext.imageBytes] を補正後のバイト列へ
+  /// 差し替える（補正なし・失敗時は何もしない）。
+  void _applyRollCorrection(OcrPipelineContext context) {
     if (context.layoutHint != InputLayoutHint.acV1) {
-      return null;
-    }
-    try {
-      final corrected = rollCorrector.maybeUpright(context.imageFile);
-      if (corrected == null) {
-        return null;
-      }
-      context.imageFile = corrected;
-      return corrected;
-    } catch (_) {
-      // WHY fail-safe: 補正に失敗しても OCR 本体を現行動作（元ファイル）で
-      // 完走させる（設計 §3・遮断しない）。
-      return null;
-    }
-  }
-
-  /// 補正一時ファイルを削除する。
-  ///
-  /// WHY 同一パス保護: 補正器が入力ファイルと同じパスを返した（または戻り値
-  /// が null の）場合に呼び出し元の入力ファイルを誤削除しない。
-  void _deleteRollCorrectedTemp(File? temp, {required String originalPath}) {
-    if (temp == null || temp.path == originalPath) {
       return;
     }
-    if (temp.existsSync()) {
-      temp.deleteSync();
+    try {
+      final corrected = rollCorrector.maybeUpright(context.imageBytes);
+      if (corrected != null) {
+        context.imageBytes = corrected;
+      }
+    } catch (_) {
+      // WHY fail-safe: 補正に失敗しても OCR 本体を現行動作（元画像）で
+      // 完走させる（設計 §3・遮断しない）。
     }
   }
 
@@ -291,7 +263,7 @@ class OcrPipeline {
 
   Future<void> _runPreProcess(OcrPipelineContext context) async {
     final preprocessor = InputPreprocessor();
-    final cls = preprocessor.classify(context.imageFile);
+    final cls = preprocessor.classify(context.imageBytes);
     context.imageClass = cls;
 
     // WHY 分類直後に整合判定: 不一致フラグは「ST-1 分類から期待されるレイ
@@ -334,10 +306,11 @@ class OcrPipeline {
         break;
       case InputImageClass.portraitWithEmbedded:
       case InputImageClass.rotatedPortrait:
-        final result = await preprocessor.preprocess(context.imageFile);
-        context.preprocessedImageFile = result.preprocessedFile;
-        // 前処理後のファイルを OCR 入力用バイト列として差し替える（IO 側の 1 箇所に寄せる）。
-        context.imageBytes = await result.preprocessedFile.readAsBytes();
+        final result = await preprocessor.preprocess(context.imageBytes);
+        context.preprocessedImageBytes = result.preprocessedBytes;
+        // 前処理後の画素を以降の段の入力にする（pageResult と領域 OCR が
+        // 同じ画素を見ることを保証する）。
+        context.imageBytes = result.preprocessedBytes;
         break;
     }
   }
@@ -360,7 +333,7 @@ class OcrPipeline {
     OcrPageResult pageResult,
   ) async {
     final outcome = await LivelyOcrRoute(engine: engine)
-        .run(imageBytes: context.imageBytes!, pageResult: pageResult);
+        .run(imageBytes: context.imageBytes, pageResult: pageResult);
     context.regionOcrResult = outcome.regionOcr;
     context.extractionResult = outcome.extraction;
   }
@@ -380,10 +353,11 @@ class OcrPipeline {
   // -----------------------------------------------------------------------
 
   Future<void> _runFieldOcr(OcrPipelineContext context) async {
-    final ocrImageFile = context.preprocessedImageFile ?? context.imageFile;
+    // アンカー検出に使う画素。前処理があればその出力、無ければ入力そのもの。
+    final ocrImageBytes = context.preprocessedImageBytes ?? context.imageBytes;
 
     // フルページ OCR（Uint8List 入力）。
-    final pageResult = await engine.recognize(context.imageBytes!);
+    final pageResult = await engine.recognize(context.imageBytes);
     context.pageResult = pageResult;
 
     // WHY: 領域クロップ・抽出には正規化座標変換用の画像寸法が必須。寸法を設定
@@ -423,7 +397,7 @@ class OcrPipeline {
     final isAcV1 = layoutKind == LayoutKind.acV1;
 
     // ST-3.5: UI アンカー検出（領域 OCR の前に 1 回・設計 §2.5）。
-    // WHY 同一ファイル: pageResult と同じ ocrImageFile に対して detect する
+    // WHY 同一画素: pageResult と同じ ocrImageBytes に対して detect する
     // ため座標系が一致する（0070184 教訓・前処理クロップ空間と pageResult
     // 座標の不一致で領域 OCR が全滅した経験）。デコード失敗/パック欠落は
     // anchors = null で現行動作に落ちる（機能 OFF）。
@@ -433,14 +407,14 @@ class OcrPipeline {
         : await _loadAnchorPack();
     final anchors = anchorPack == null
         ? null
-        : AnchorRegistration.detect(ocrImageFile, anchorPack);
+        : AnchorRegistration.detect(ocrImageBytes, anchorPack);
     context.anchorRegistration = anchors;
 
     // 領域別 OCR（Uint8List 入力）。
     final regionRunner = RegionOcrRunner(engine: engine);
     final regionResult = await regionRunner.run(
       pageResult,
-      context.imageBytes!,
+      context.imageBytes,
       anchors: anchors,
       layoutKind: layoutKind,
     );

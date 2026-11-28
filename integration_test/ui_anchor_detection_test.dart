@@ -129,7 +129,10 @@ Future<void> main() async {
     final costs = <int>[];
     for (final path in paths) {
       final sw = Stopwatch()..start();
-      final registration = AnchorRegistration.detect(File(path), pack!);
+      final registration = AnchorRegistration.detect(
+        File(path).readAsBytesSync(),
+        pack!,
+      );
       sw.stop();
       costs.add(sw.elapsedMilliseconds);
       for (final id in _landscapeFloors.keys) {
@@ -165,14 +168,16 @@ Future<void> main() async {
     final costs = <int>[];
     final failures = <String>[];
     for (final id in _scrIds) {
-      final result = await preprocessor.preprocess(File(_scrPath(id)));
+      final result = await preprocessor.preprocess(
+        File(_scrPath(id)).readAsBytesSync(),
+      );
       if (result.embeddedRect == null || !result.aspectRatioValid) {
         failures.add('$id: 帯抽出失敗（タスク A 回帰）');
         continue;
       }
       final sw = Stopwatch()..start();
       final registration = AnchorRegistration.detect(
-        result.preprocessedFile,
+        result.preprocessedBytes,
         pack!,
       );
       sw.stop();

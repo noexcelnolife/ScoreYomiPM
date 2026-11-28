@@ -6,8 +6,8 @@
 //   デジタル取り込み（hint 無し/hcV1）は現行バイト等価を維持する。
 // - DIP: OcrPipeline は RollCorrector を注入可能（既定生成契約は
 //   imagePicker 未注入不具合 a0d6a03 の教訓を踏襲）。
-// - 一時ファイル後始末: 補正で作られたファイルは run 完了時に消す。
-//   ただし入力と同じパスが返った場合は削除しない（呼び出し元のファイル保護）。
+// - 入力の保持: 補正は入力バイト列を差し替えるだけで、入力そのものは
+//   書き換えない・消さない（バイト列渡しなので削除という失敗モードが無い）。
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -63,10 +63,10 @@ class _CountingRollCorrector extends RollCorrector {
   int callCount = 0;
 
   /// maybeUpright の戻り値（null = 補正なし・非 null = 差し替え）。
-  File? Function(File source)? onCall;
+  Uint8List? Function(Uint8List source)? onCall;
 
   @override
-  File? maybeUpright(File source) {
+  Uint8List? maybeUpright(Uint8List source) {
     callCount++;
     return onCall?.call(source);
   }
@@ -99,57 +99,57 @@ void main() {
       );
       final file = File(playsharePath);
       expect(file.existsSync(), isTrue, reason: '欠落: $playsharePath');
+      final bytes = file.readAsBytesSync();
 
-      await pipeline.run(file);
+      await pipeline.run(bytes);
       expect(corrector.callCount, 0, reason: 'hint 無しは補正しない');
 
-      await pipeline.run(file, layoutHint: InputLayoutHint.hcV1);
+      await pipeline.run(bytes, layoutHint: InputLayoutHint.hcV1);
       expect(corrector.callCount, 0, reason: 'hcV1 は補正しない');
 
-      await pipeline.run(file, layoutHint: InputLayoutHint.acV1);
+      await pipeline.run(bytes, layoutHint: InputLayoutHint.acV1);
       expect(corrector.callCount, 1, reason: 'acV1（カメラ経路）のみ補正する');
     }, skip: imageSkip);
 
-    test('補正ファイルへ差し替えられ、run 後に一時ファイルが消される', () async {
+    test('補正結果のバイト列へ差し替えられ、入力バイト列は書き換わらない', () async {
       final corrector = _CountingRollCorrector();
       final pipeline = OcrPipeline(
         engine: _SizeAwareFakeEngine(),
         rollCorrector: corrector,
       );
-      final source = File(playsharePath);
-      final tempCopy = File(
-        '${Directory.systemTemp.path}/roll_pipe_${DateTime.now().microsecondsSinceEpoch}.jpg',
-      );
-      tempCopy.writeAsBytesSync(source.readAsBytesSync());
-      addTearDown(() {
-        if (tempCopy.existsSync()) {
-          tempCopy.deleteSync();
-        }
-      });
-      corrector.onCall = (_) => tempCopy;
+      final source = File(playsharePath).readAsBytesSync();
+      final corrected = Uint8List.fromList(source);
+      corrector.onCall = (_) => corrected;
 
       final context = await pipeline.run(
         source,
         layoutHint: InputLayoutHint.acV1,
       );
 
-      expect(context.imageFile.path, tempCopy.path);
-      // WHY run 完了後: パイプラインが一時ファイルの後始末を持つ（設計 §3）。
-      expect(tempCopy.existsSync(), isFalse, reason: 'run 後に一時ファイル削除');
+      expect(context.imageBytes, same(corrected));
+      expect(context.sourcePath, isNull);
+      // WHY: 補正は入力の複製ではなく差し替え。呼び出し元が渡した配列は
+      // パイプラインの都合で書き換わらない（呼び出し元が後で再利用できる）。
+      expect(source, equals(corrected));
     }, skip: imageSkip);
 
-    test('補正器が入力と同じパスを返したときは削除しない（呼び出し元保護）', () async {
+    test('補正器が入力をそのまま返しても入力バイト列は失われない', () async {
       final corrector = _CountingRollCorrector();
       final pipeline = OcrPipeline(
         engine: _SizeAwareFakeEngine(),
         rollCorrector: corrector,
       );
-      final source = File(playsharePath);
-      corrector.onCall = (s) => s;
+      final bytes = File(playsharePath).readAsBytesSync();
+      corrector.onCall = (source) => source;
 
-      await pipeline.run(source, layoutHint: InputLayoutHint.acV1);
+      final context = await pipeline.run(
+        bytes,
+        layoutHint: InputLayoutHint.acV1,
+      );
 
-      expect(source.existsSync(), isTrue, reason: '入力ファイルは削除されない');
+      // WHY: 以前は補正結果を一時ファイルで受け渡していたため「入力ファイルを
+      // 誤って消さない」ことを守る必要があった。バイト列渡しでは削除が起きない。
+      expect(context.imageBytes, same(bytes));
     }, skip: imageSkip);
 
     test('補正器が例外を出しても run は完走する（fail-safe）', () async {
@@ -158,15 +158,15 @@ void main() {
         engine: _SizeAwareFakeEngine(),
         rollCorrector: corrector,
       );
-      final file = File(playsharePath);
+      final bytes = File(playsharePath).readAsBytesSync();
       corrector.onCall = (_) => throw StateError('補正器内部エラーの想定');
 
       final context = await pipeline.run(
-        file,
+        bytes,
         layoutHint: InputLayoutHint.acV1,
       );
 
-      expect(context.imageFile.path, file.path);
+      expect(context.imageBytes, same(bytes));
     }, skip: imageSkip);
 
     test('acV1 ヒント時は分類駆動の刈り出し前処理をスキップする', () async {
@@ -177,14 +177,15 @@ void main() {
       // 元画像のまま acV1 領域で抽出する。
       final pipeline = OcrPipeline(engine: _SizeAwareFakeEngine());
       final file = File('testimage/playshare/Screenshot_20261122-124336.png');
+      final bytes = file.readAsBytesSync();
 
-      final hinted = await pipeline.run(file, layoutHint: InputLayoutHint.acV1);
-      expect(hinted.preprocessedImageFile, isNull);
+      final hinted = await pipeline.run(bytes, layoutHint: InputLayoutHint.acV1);
+      expect(hinted.preprocessedImageBytes, isNull);
 
       // WHY 回帰ガード: hint 無し（共有経路）は現行どおり刈り出し前処理が
       // 走る。スキップが acV1 ヒントに限定されていることを固定する。
-      final unhinted = await pipeline.run(file);
-      expect(unhinted.preprocessedImageFile, isNotNull);
+      final unhinted = await pipeline.run(bytes);
+      expect(unhinted.preprocessedImageBytes, isNotNull);
     }, skip: screenshotSkip);
   });
 }
