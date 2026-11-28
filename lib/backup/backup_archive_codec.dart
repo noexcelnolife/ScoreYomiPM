@@ -173,6 +173,13 @@ class BackupArchiveCodec {
         name: 'backup_archive_codec',
       );
       return const <MemoTemplate>[];
+    } on FormatException catch (error) {
+      warnings.add('$memoTemplatesFileName を読み取れないため、メモのテンプレートは復元しません。');
+      developer.log(
+        '$memoTemplatesFileName の復号に失敗: $error',
+        name: 'backup_archive_codec',
+      );
+      return const <MemoTemplate>[];
     }
     if (decoded is! List) {
       warnings.add('$memoTemplatesFileName の形式が不正なため、メモのテンプレートは復元しません。');
