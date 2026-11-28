@@ -93,16 +93,19 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment:
-      # 既定の `github-pages` を使わない。
-      # WHY: Settings から Pages を有効化すると、GitHub は `github-pages` 環境に
-      # 「main からの配布のみ許可」という保護ルールを自動で付ける（2026-11-25 実測:
-      # deployment-branch-policies は main の 1 件のみ）。その状態で feature/web から配布すると
-      #   Branch "feature/web" is not allowed to deploy to github-pages due to environment protection rules.
-      # でジョブが開始前に落ちる。許可ブランチの追加はリポジトリ管理者権限が要り、PAT では 403。
-      # 公式ドキュメントは「必要なら別の環境名でもよい（推奨はしない）」と明記しており、
-      # OIDC トークンの環境クレームはここで指定した名前で検証される。
-      # main へマージしない方針の間だけこの名前を使い、マージ後に `github-pages` へ戻す。
-      name: web-publish
+      # この名前を変えてはいけない。実測で 2 通りとも失敗した（2026-11-25）。
+      #   1) github-pages のまま feature/web から配布
+      #      -> Branch "feature/web" is not allowed to deploy to github-pages
+      #         due to environment protection rules.（ジョブが開始前に落ちる）
+      #   2) 環境名を web-publish に変える
+      #      -> Invalid deployment branch and no branch protection rules set in the environment.
+      #         Deployments are only allowed from main（Pages の配布 API が 400 で拒否）
+      # つまり非 main から配布するには、配布先の環境に feature/web を許可する保護ルールが必須。
+      # Settings から Pages を有効化した時点で github-pages には「main のみ」の
+      # custom_branch_policies が自動で付く。そこへ feature/web を足す操作は
+      # リポジトリ管理者権限が要り、PAT では 403 で変更できなかった（D-W21）。
+      # main へマージした後は main が許可済みなので、この行は触らなくてよい。
+      name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: 公開
