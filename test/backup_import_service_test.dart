@@ -15,6 +15,7 @@ import 'package:scoreyomipm/backup/backup_archive_codec.dart';
 import 'package:scoreyomipm/backup/backup_export_service.dart';
 import 'package:scoreyomipm/backup/backup_import_service.dart';
 import 'package:scoreyomipm/backup/backup_manifest.dart';
+import 'package:scoreyomipm/data/blob_store_memo_template_repository.dart';
 import 'package:scoreyomipm/data/memo_template.dart';
 import 'package:scoreyomipm/data/memo_template_repository.dart';
 import 'package:scoreyomipm/data/play_record.dart';
@@ -269,6 +270,27 @@ void main() {
         '精度重視',
       ]);
       expect(restored.first.body, '要復習です');
+    });
+
+    // WHY: Web は FileMemoTemplateRepository を持てず BlobStore 実装を使う（D-W14）。
+    // ここが空リストを返すと、Android で作った ZIP を Web で復元したときに
+    // テンプレートが警告もなく消える。異種実装間の往復を直接固定する。
+    test('Android 製 ZIP を BlobStore 実装（Web 相当）へ復元できる', () async {
+      final Uint8List zip = await buildZipWithTemplates();
+      final MemoryBlobStore store = MemoryBlobStore();
+      final BlobStoreMemoTemplateRepository webTemplates =
+          BlobStoreMemoTemplateRepository(store);
+
+      final BackupImportOutcome outcome = await buildServiceWithTemplates(
+        repoB,
+        templates: webTemplates,
+      ).apply(zip, mode: ImportMode.merge);
+
+      expect(outcome.templatesImported, 2);
+      expect(
+        (await webTemplates.listAll()).map((MemoTemplate t) => t.title),
+        <String>['要復習', '精度重視'],
+      );
     });
 
     test('復元は追加のみで、2 回当てても増えない', () async {
