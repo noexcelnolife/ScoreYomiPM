@@ -4,6 +4,9 @@
 // 正規化キー重複時は追加DB（localAdditional）優先 → downloadedMain → bundledSeed
 // の順で上書き。新曲の運用反映を追加DBで上書きできる意。
 //
+// ソース「間」では上記の優先順位でキーごとに丸ごと差し替えるが、
+// ソース「内」の同一キー行は全部残す（同名異曲を消さない）。
+//
 // Bad行（JSONパースエラー・必須フィールド欠如等）は1エントリずつスキップし、
 // マージ全体は失敗させない（partial failure 許容）。
 
@@ -61,27 +64,54 @@ class MergedSongRepository implements SongRepository, ReloadableSongRepository {
   bool containsNormalizedKey(String normalizedKey) =>
       _byNormalizedKey.containsKey(normalizedKey);
 
-  /// ソースを優先順位順（高→低）でマージ。
+  /// ソースを優先順位順（高→低）でマージする。
   ///
-  /// 同一 normalizedKey が複数ソースに存在する場合、より優先度の高いソース
-  /// のエントリが採用される。
+  /// WHY(ソース内の同一キー行を残すか): 正規化キーが同じでも別曲（版違い・
+  /// アレンジ違い）が実在する。実データでは 14 群が該当し、キー 1 本につき
+  /// 1 行しか持たなかった旧実装ではその 14 群で曲が消えていた
+  /// （2,100 行 → 2,086 行）。「同名は 1 曲」という前提自体が誤り。
+  ///
+  /// WHY(ソース間はキー単位で丸ごと差し替えるか): 下位ソースの行だけを
+  /// 残すと、優先度の低い古い定義が同じキーに混ざる。キーを持つ最上位
+  /// ソースの行群で置き換え、下位ソースの同一キー行は捨てる。
   void _merge() {
     _byNormalizedKey.clear();
     _allSongs.clear();
 
-    // 優先順位の低いソースから順に処理し、上書きしていく。
-    // これにより、高優先度ソースのエントリが最終的に残る。
+    // 優先順位の低いソースから積み、上位ソースが同一キーを丸ごと置換する。
+    final rowsByKey = <String, List<SongEntry>>{};
     for (int i = _sources.length - 1; i >= 0; i--) {
       final source = _sources[i];
       if (!source.isAvailable) continue;
-      for (final entry in source.allSongs) {
-        _byNormalizedKey[entry.normalizedKey] = entry;
-      }
+      rowsByKey.addAll(_groupByNormalizedKey(source.allSongs));
     }
 
-    // 正規化キー順でソートして安定した順序を確保。
-    _allSongs.addAll(_byNormalizedKey.values);
-    _allSongs.sort((a, b) => a.normalizedKey.compareTo(b.normalizedKey));
+    for (final rows in rowsByKey.values) {
+      // WHY(id 昇順に並べるか): 代表行を id 最小に固定するため。代表の
+      // 選び方が入力順に依存すると、findByNormalizedKey の戻り値が
+      // 実行ごとに変わる。
+      rows.sort((a, b) => a.id.compareTo(b.id));
+      _byNormalizedKey[rows.first.normalizedKey] = rows.first;
+      _allSongs.addAll(rows);
+    }
+
+    // WHY(キーと id の 2 段で並べるか): キーだけで並べると同キー内の順序が
+    // 未定義になり、allSongs の並び（＝検索結果の順位）が実行ごとに揺れる。
+    _allSongs.sort((a, b) {
+      final byKey = a.normalizedKey.compareTo(b.normalizedKey);
+      return byKey != 0 ? byKey : a.id.compareTo(b.id);
+    });
+  }
+
+  /// [entries] を normalizedKey ごとにまとめる（キー内の順序は元のまま）。
+  static Map<String, List<SongEntry>> _groupByNormalizedKey(
+    List<SongEntry> entries,
+  ) {
+    final grouped = <String, List<SongEntry>>{};
+    for (final entry in entries) {
+      (grouped[entry.normalizedKey] ??= <SongEntry>[]).add(entry);
+    }
+    return grouped;
   }
 
   /// ソースリストを再マージ（ソース追加・削除・変更後に呼び出す）。
