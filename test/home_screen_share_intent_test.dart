@@ -54,6 +54,7 @@ class _FakeSongDatabaseService implements SongDatabaseService {
   Future<SongImportResult> importAdditionalJson(
     Uint8List bytes, {
     required String fileName,
+    int? declaredLength,
   }) async =>
       const SongImportResult(success: false);
 

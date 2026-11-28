@@ -15,6 +15,13 @@ import 'song_database_status.dart';
 
 export 'song_database_status.dart';
 
+/// 追加 DB として取り込める JSON の上限（5 MB）。
+///
+/// WHY(5MB か): 追加 DB の実データは 2100 曲で約 1.0 MB。上限は「取り違えた別
+/// ファイルを選んだ」場合の暴発防止であり、実データに対して十分な余裕を残す。
+/// 選択側（`defaultPickAdditionalFile`）と判定側（本サービス）で同じ値を使う。
+const int kMaxAdditionalJsonBytes = 5 * 1024 * 1024;
+
 /// 収録曲 DB 操作の抽象インターフェース（UI はこの抽象のみに依存する）。
 abstract class SongDatabaseService {
   /// 設定済みの配信 URL。未設定は空文字。
@@ -40,9 +47,12 @@ abstract class SongDatabaseService {
   ///
   /// [fileName] は取り込み元のファイル名（記録・表示用）。パス文字列は
   /// Web では開けないため、境界からパスを排除しバイト列＋名前で渡す。
+  /// [declaredLength] は選択時点で分かっている元ファイルのサイズ
+  /// （上限超過を読み込み前に弾くための申告値。省略時は [bytes] の長さで判定）。
   Future<SongImportResult> importAdditionalJson(
     Uint8List bytes, {
     required String fileName,
+    int? declaredLength,
   });
 }
 
@@ -196,9 +206,13 @@ class FileSongDatabaseService implements SongDatabaseService {
   Future<SongImportResult> importAdditionalJson(
     Uint8List bytes, {
     required String fileName,
+    int? declaredLength,
   }) async {
-    final SongImportResult result =
-        await _performImport(bytes, fileName: fileName);
+    final SongImportResult result = await _performImport(
+      bytes,
+      fileName: fileName,
+      declaredLength: declaredLength,
+    );
     await _recordLastOperation(
       SongDbLastOperation(
         kind: SongDbOperationKind.importAdditional,
@@ -274,25 +288,29 @@ class FileSongDatabaseService implements SongDatabaseService {
   ///
   /// [bytes] はファイル選択で得たバイト列（P3 相当：Web 対応のためパス文字列を
   /// 境界から排除）。[fileName] は表示・記録用のファイル名。
+  /// [declaredLength] は選択時点で分かっている元ファイルのサイズ。
+  ///
+  /// WHY([declaredLength] を持つか): 上限超過を**読み込む前に**弾きたいが、
+  /// 取り込みの合否メッセージはサービスが一元管理する。選択側はサイズだけ申告し、
+  /// 判定とメッセージはここに寄せる（メッセージの二重管理を避ける）。
   Future<SongImportResult> _performImport(
     Uint8List bytes, {
     required String fileName,
+    int? declaredLength,
   }) async {
+    final int sizeInBytes = declaredLength ?? bytes.lengthInBytes;
+    if (sizeInBytes > kMaxAdditionalJsonBytes) {
+      return const SongImportResult(
+        success: false,
+        message: 'ファイルサイズが 5MB を超えています。',
+      );
+    }
+
     // WHY: 空ファイルは早期に検出し、JSON パースをスキップする。
     if (bytes.isEmpty) {
       return const SongImportResult(
         success: false,
         message: '選択されたファイルが空です。',
-      );
-    }
-
-    // WHY: 5MB を超えるファイルはメモリ使用量の観点から拒否する
-    // （設計 §2.2：ファイルサイズ上限）。
-    const int maxSizeBytes = 5 * 1024 * 1024;
-    if (bytes.lengthInBytes > maxSizeBytes) {
-      return const SongImportResult(
-        success: false,
-        message: 'ファイルサイズが 5MB を超えています。',
       );
     }
 

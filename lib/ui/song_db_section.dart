@@ -21,9 +21,20 @@ import '../songdb/song_database_service.dart';
 /// WHY: Web（dart:html）では `XFile.path`（ローカルファイルパス文字列）が
 /// 開けないため、境界からパスを排除しバイト列＋名前で扱う（S1 設計 §2.1）。
 class PickedFile {
-  const PickedFile({required this.name, required this.bytes});
+  const PickedFile({
+    required this.name,
+    required this.bytes,
+    this.declaredLength,
+  });
+
   final String name;
   final Uint8List bytes;
+
+  /// 選択時点で分かっている元ファイルのサイズ（バイト）。
+  ///
+  /// WHY(サイズを別に持つか): 上限超過のファイルは読み込まずに [bytes] を空のまま
+  /// 返し、判定と文言はサービスへ委ねる。そのために「元のサイズ」だけを申告する。
+  final int? declaredLength;
 }
 
 /// 収録曲辞書セクションの StatefulWidget。
@@ -79,8 +90,20 @@ Future<PickedFile?> defaultPickAdditionalFile() async {
     acceptedTypeGroups: <XTypeGroup>[jsonType],
   );
   if (file == null) return null;
+  final int length = await file.length();
+  // WHY(読む前にサイズを見るか): readAsBytes() を先に呼ぶと、取り違えて巨大な
+  // ファイルを選んだときにその全体をメモリへ載せてしまう（モバイルのブラウザでは
+  // タブが落ちる）。上限超過は空のバイト列と申告サイズだけを渡し、拒否の判定と
+  // 文言はサービス側へ一本化する。
+  if (length > kMaxAdditionalJsonBytes) {
+    return PickedFile(name: file.name, bytes: Uint8List(0), declaredLength: length);
+  }
   final Uint8List bytes = await file.readAsBytes();
-  return PickedFile(name: file.name, bytes: bytes);
+  return PickedFile(
+    name: file.name,
+    bytes: bytes,
+    declaredLength: length,
+  );
 }
 
 class _SongDbSectionState extends State<SongDbSection> {
@@ -174,7 +197,11 @@ class _SongDbSectionState extends State<SongDbSection> {
     // WHY: ファイル選択のキャンセルは操作として無視（サイレント）。
     if (picked == null) return;
     final SongImportResult result = await widget.songDatabaseService
-        .importAdditionalJson(picked.bytes, fileName: picked.name);
+        .importAdditionalJson(
+          picked.bytes,
+          fileName: picked.name,
+          declaredLength: picked.declaredLength,
+        );
     if (!mounted) return;
     if (result.success) {
       widget.onDictionaryChanged?.call();

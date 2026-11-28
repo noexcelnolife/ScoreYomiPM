@@ -11,7 +11,8 @@ import 'dart:typed_data';
 import 'song_database_service.dart';
 
 /// 常に「未対応」を返すサービス。
-class UnsupportedSongDatabaseService implements SongDatabaseService {  const UnsupportedSongDatabaseService();
+class UnsupportedSongDatabaseService implements SongDatabaseService {
+  const UnsupportedSongDatabaseService();
 
   /// 未対応であることを示すメッセージ。
   static const String _message = 'この環境では曲データベースの更新に対応していません。';
@@ -54,6 +55,7 @@ class UnsupportedSongDatabaseService implements SongDatabaseService {  const Uns
   Future<SongImportResult> importAdditionalJson(
     Uint8List bytes, {
     required String fileName,
+    int? declaredLength,
   }) async {
     return const SongImportResult(success: false, message: _message);
   }

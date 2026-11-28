@@ -279,5 +279,24 @@ void main() {
       expect(result.success, isFalse);
       expect(result.message, isNotNull);
     });
+
+    test('申告サイズが上限を超える場合は中身を読まずに拒否する', () async {
+      final FileSongDatabaseService service = createService(
+        MockClient((request) async => http.Response('', 200)),
+      );
+
+      // WHY(バイト列を空で渡すか): 上限超過の判定は「読み込む前」に済ませる設計。
+      // 選択側はサイズだけ申告し、中身は読まない。判定と文言はサービスに集約する。
+      final SongImportResult result = await service.importAdditionalJson(
+        Uint8List(0),
+        fileName: 'huge.json',
+        declaredLength: kMaxAdditionalJsonBytes + 1,
+      );
+
+      expect(result.success, isFalse);
+      expect(result.message, contains('5MB'));
+      // 空ファイル扱いのメッセージに落ちていないこと（判定順序の回帰）。
+      expect(result.message, isNot(contains('空')));
+    });
   });
 }
