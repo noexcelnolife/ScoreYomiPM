@@ -1,0 +1,17 @@
+{
+  "name": "scoreyomipm-ocr-vendor",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Web 版 OCR 資産（@paddleocr/paddleocr-js）の取得と配置。生成物は追跡しない（D-W16）。",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@paddleocr/paddleocr-js": "0.4.2",
+    "onnxruntime-web": "1.24.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

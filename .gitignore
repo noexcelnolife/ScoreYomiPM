@@ -28,6 +28,13 @@ tool/data/
 # `dart run tool/generate_songdb.dart` で誰でも再生成できる（APK にも同梱しない）。
 /db/
 
+# Web 版 OCR の生成物（tool/ocr_vendor/build.mjs が作る）。
+# WHY: 実測で合計 35.4 MiB。minify 済みの 1 行ファイルで差分レビューができず、
+# package.json と package-lock.json から完全に再現できるため、リポジトリには含めない
+# （reports/web-decisions.md D-W16）。`node tool/ocr_vendor/build.mjs` で再生成する。
+/web/ocr_vendor/
+/tool/ocr_vendor/.entry.mjs
+
 # 内部の開発記録（設計確認レポート・実測ログ・リリースノート等）。
 # WHY: 公開物として読ませる内容ではなく、商標名（対象ゲーム名・メーカー名）と
 # 社内検討の経緯が大量に含まれる。README が参照する docs/media/ だけを追跡する。
