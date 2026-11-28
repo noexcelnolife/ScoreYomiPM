@@ -1,18 +1,18 @@
 // Wave 2 ST-4 パイプライン統合テスト（fake engine TDD）。
 // RegionOcrRunner を含む経路、寸法欠落時 null、anchor 皆無時 full extract 同等。
 import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:scoreyomipm/models/ocr_models.dart';
-import 'package:scoreyomipm/ocr/downloaded_main_repository.dart';
 import 'package:scoreyomipm/ocr/field_extractor.dart';
-import 'package:scoreyomipm/ocr/local_additional_repository.dart';
 import 'package:scoreyomipm/ocr/ocr_engine.dart';
 import 'package:scoreyomipm/ocr/pipeline.dart';
 import 'package:scoreyomipm/ocr/song_entry.dart';
+import 'package:scoreyomipm/ocr/in_memory_song_repository.dart';
 import 'package:scoreyomipm/ocr/song_repository.dart';
 
 import 'test_image_helper.dart';
@@ -404,7 +404,17 @@ void main() {
       // WHY: 3 リポジトリ経路の消費側整合（fr6 設計 §3）。実 JSON → 実
       // DownloadedMainRepository（lazy 読込）→ pipeline →
       // context.matchedSong.notesCountFor まで通す（fake でなく実ディスク読込）。
-      final repo = DownloadedMainRepository(file.path);
+      // JSON を読み込み、InMemorySongRepository に変換（DownloadedMainRepository の代わり）。
+      final json = await file.readAsString();
+      final data = jsonDecode(json) as Map<String, dynamic>;
+      final songs = data['songs'] as List<dynamic>;
+      final entries = <SongEntry>[];
+      for (final row in songs) {
+        if (row is Map<String, dynamic>) {
+          entries.add(SongEntry.fromJson(row));
+        }
+      }
+      final repo = InMemorySongRepository(entries: entries);
 
       final pipeline = OcrPipeline(
         engine: _engineWithSongTitle('Main Repo Song'),
@@ -428,7 +438,17 @@ void main() {
       );
       // WHY: additional はマージ最優先。seed に無い曲名のため additional の
       // エントリが採用されることが matchedSong でも確認できる（fr6 設計 §3）。
-      final repo = LocalAdditionalRepository(file.path);
+      // JSON を読み込み、InMemorySongRepository に変換（LocalAdditionalRepository の代わり）。
+      final json = await file.readAsString();
+      final data = jsonDecode(json) as Map<String, dynamic>;
+      final songs = data['songs'] as List<dynamic>;
+      final entries = <SongEntry>[];
+      for (final row in songs) {
+        if (row is Map<String, dynamic>) {
+          entries.add(SongEntry.fromJson(row));
+        }
+      }
+      final repo = InMemorySongRepository(entries: entries);
 
       final pipeline = OcrPipeline(
         engine: _engineWithSongTitle('Additional Song'),

@@ -20,6 +20,7 @@ import 'song_title_element_matcher.dart';
 import 'song_title_matcher.dart';
 import 'bundled_seed_repository.dart';
 import 'merged_song_repository.dart';
+import 'blob_store_song_repository_loader.dart';
 
 /// OCR パイプラインのステージ。
 enum OcrPipelineStage { preProcess, fieldOcr, songMatching }
@@ -498,7 +499,7 @@ class OcrPipeline {
       }
       sources.add(seedRepo);
 
-      final mergedRepo = MergedSongRepository(sources);
+      final mergedRepo = MergedSongRepository(sources: sources, loaders: const <BlobStoreSongRepositoryLoader>[]);
 
       context.songRepository = mergedRepo;
 

@@ -71,7 +71,7 @@ class SongDbSection extends StatefulWidget {
   final Future<int?> Function()? totalSongCount;
 
   /// 辞書が実際に差し替わったときに呼ぶ（親の曲数表示を更新してもらう）。
-  final VoidCallback? onDictionaryChanged;
+    final Future<void> Function()? onDictionaryChanged;
 
   @override
   State<SongDbSection> createState() => _SongDbSectionState();
@@ -166,7 +166,7 @@ class _SongDbSectionState extends State<SongDbSection> {
     _handleUpdateResult(result);
     if (result.status == SongDbUpdateStatus.applied) {
       // WHY: 辞書が入れ替わったので、親のライブ検索キャッシュと曲数表示を作り直す。
-      widget.onDictionaryChanged?.call();
+      await widget.onDictionaryChanged?.call();
     }
     await _refreshStatus();
   }
@@ -204,7 +204,7 @@ class _SongDbSectionState extends State<SongDbSection> {
         );
     if (!mounted) return;
     if (result.success) {
-      widget.onDictionaryChanged?.call();
+      await widget.onDictionaryChanged?.call();
     } else {
       _showNoticeSnackBar(result.message ?? '追加辞書の取り込みに失敗しました。');
     }

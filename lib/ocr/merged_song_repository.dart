@@ -7,8 +7,9 @@
 // Bad行（JSONパースエラー・必須フィールド欠如等）は1エントリずつスキップし、
 // マージ全体は失敗させない（partial failure 許容）。
 
-import 'song_entry.dart';
-import 'song_repository.dart';
+import 'package:scoreyomipm/ocr/blob_store_song_repository_loader.dart';
+import 'package:scoreyomipm/ocr/song_entry.dart';
+import 'package:scoreyomipm/ocr/song_repository.dart';
 
 /// 3ソースをマージした統合楽曲辞書リポジトリ。
 ///
@@ -17,15 +18,21 @@ import 'song_repository.dart';
 ///   2. downloadedMain（配信サーバーDL済みメインDB）
 ///   3. bundledSeed（アセットJSON・オフラインフォールバック）
 class MergedSongRepository implements SongRepository {
-  final List<SongRepository> _sources; // 優先順位順（高→低）
+  MergedSongRepository({
+    required List<SongRepository> sources,
+    required this.loaders,
+  }) : _sources = List<SongRepository>.from(sources) {
+    _merge();
+  }
+
+  final List<SongRepository> _sources;
+  final List<BlobStoreSongRepositoryLoader> loaders;
 
   final Map<String, SongEntry> _byNormalizedKey = {};
   final List<SongEntry> _allSongs = [];
 
   /// [sources] は優先順位順（インデックス0が最優先）で渡すこと。
-  MergedSongRepository(this._sources) {
-    _merge();
-  }
+  /// [loaders] は [reload] で BlobStore からソースを再読み込みする際に使用する。
 
   @override
   String get sourceName =>
@@ -73,6 +80,22 @@ class MergedSongRepository implements SongRepository {
 
   /// ソースリストを再マージ（ソース追加・削除・変更後に呼び出す）。
   void refresh() {
+    _merge();
+  }
+
+  /// BlobStore からソースを読み直し、再マージする。
+  ///
+  /// 取り込み直後に呼び出すことで、新しい曲がすぐに検索に出るようにする。
+  /// 各ローダーから新しい [InMemorySongRepository] を作成し、ソース差し替え後
+  /// に [refresh] を実行する。
+  Future<void> reload() async {
+    final sources = <SongRepository>[];
+    for (final loader in loaders) {
+      sources.add(await loader.load());
+    }
+    _sources
+      ..clear()
+      ..addAll(sources);
     _merge();
   }
 }

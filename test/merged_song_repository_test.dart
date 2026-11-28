@@ -3,6 +3,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:scoreyomipm/ocr/merged_song_repository.dart';
+import 'package:scoreyomipm/ocr/blob_store_song_repository_loader.dart';
 import 'package:scoreyomipm/ocr/song_entry.dart';
 import 'package:scoreyomipm/ocr/song_repository.dart';
 
@@ -86,11 +87,11 @@ void main() {
         ],
       );
 
-      final merged = MergedSongRepository(<SongRepository>[
+      final merged = MergedSongRepository(sources: <SongRepository>[
         additional, // 最高優先
         main,
         seed, // 最低優先
-      ]);
+], loaders: const <BlobStoreSongRepositoryLoader>[]);
 
       expect(merged.length, equals(4));
       expect(merged.sourceName, contains('merged'));
@@ -135,11 +136,11 @@ void main() {
         ],
       );
 
-      final merged = MergedSongRepository(<SongRepository>[
+      final merged = MergedSongRepository(sources: <SongRepository>[
         additional,
         main,
         seed,
-      ]);
+], loaders: const <BlobStoreSongRepositoryLoader>[]);
 
       final dupe = merged.findByNormalizedKey('dupe');
       expect(dupe?.title, equals('Additional'));
@@ -153,7 +154,7 @@ void main() {
           SongEntry(id: 's1', title: 'Seed', normalizedKey: 'seedsong'),
         ],
       );
-      final merged = MergedSongRepository(<SongRepository>[seed]);
+      final merged = MergedSongRepository(sources: <SongRepository>[seed], loaders: const <BlobStoreSongRepositoryLoader>[]);
 
       expect(merged.containsNormalizedKey('seedsong'), isTrue);
       expect(merged.containsNormalizedKey('nonexistent'), isFalse);
@@ -167,7 +168,7 @@ void main() {
           SongEntry(id: 's1', title: 'A Song', normalizedKey: 'asong'),
         ],
       );
-      final merged = MergedSongRepository(<SongRepository>[seed]);
+      final merged = MergedSongRepository(sources: <SongRepository>[seed], loaders: const <BlobStoreSongRepositoryLoader>[]);
 
       expect(merged.allSongs[0].normalizedKey, equals('asong'));
       expect(merged.allSongs[1].normalizedKey, equals('bsong'));
@@ -179,7 +180,7 @@ void main() {
         songs: <SongEntry>[],
         available: false,
       );
-      final merged = MergedSongRepository(<SongRepository>[seed]);
+      final merged = MergedSongRepository(sources: <SongRepository>[seed], loaders: const <BlobStoreSongRepositoryLoader>[]);
       expect(merged.isAvailable, isFalse);
     });
 
@@ -196,14 +197,16 @@ void main() {
         ],
         available: true,
       );
-      final merged = MergedSongRepository(<SongRepository>[seed, main]);
+      final merged = MergedSongRepository(sources: <SongRepository>[seed, main], loaders: const <BlobStoreSongRepositoryLoader>[]);
       expect(merged.isAvailable, isTrue);
     });
 
     test('空ソースリストでは length 0', () {
-      final merged = MergedSongRepository(<SongRepository>[]);
+      final merged = MergedSongRepository(sources: <SongRepository>[], loaders: const <BlobStoreSongRepositoryLoader>[]);
       expect(merged.length, equals(0));
       expect(merged.allSongs, isEmpty);
     });
   });
 }
+
+

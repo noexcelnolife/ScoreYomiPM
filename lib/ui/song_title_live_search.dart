@@ -9,6 +9,7 @@
 import '../ocr/bundled_seed_repository.dart';
 import '../ocr/levenshtein.dart';
 import '../ocr/merged_song_repository.dart';
+import '../ocr/blob_store_song_repository_loader.dart';
 import '../ocr/song_entry.dart';
 import '../ocr/song_repository.dart';
 import '../ocr/song_title_matcher.dart';
@@ -217,7 +218,7 @@ class LiveSongTitleSearch {
         ?mainSongRepository,
         seed,
       ];
-      return MergedSongRepository(sources);
+    return MergedSongRepository(sources: sources, loaders: const <BlobStoreSongRepositoryLoader>[]);
     } catch (_) {
       // WHY: 辞書が壊れていても入力・保存は続けられるようにする（劣化は
       // 「サジェストが出ない」だけに留める）。失敗はキャッシュせず、

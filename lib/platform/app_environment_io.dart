@@ -1,49 +1,82 @@
-/// 端末（Android/iOS 相当）向けの [AppEnvironment] 実装。
-library;
+// ST-7 プラットフォーム環境（IO / Android）
 
+import 'dart:convert';
 import 'dart:io';
 
-import 'package:path_provider/path_provider.dart';
+import 'package:scoreyomipm/ocr/blob_store_song_repository_loader.dart';
+import 'package:scoreyomipm/ocr/merged_song_repository.dart';
+import 'package:scoreyomipm/ocr/song_entry.dart';
+import 'package:scoreyomipm/ocr/song_repository.dart';
+import 'package:scoreyomipm/platform/app_environment.dart';
+import 'package:scoreyomipm/platform/io_blob_store.dart';
+import 'package:scoreyomipm/platform/platform_capabilities.dart';
+import 'package:scoreyomipm/songdb/song_db_paths.dart';
+import 'package:scoreyomipm/songdb/song_database_service.dart';
 
-import '../data/memo_template_repository.dart';
-import '../ocr/downloaded_main_repository.dart';
-import '../ocr/local_additional_repository.dart';
-import '../songdb/song_database_service.dart';
-import '../songdb/song_db_paths.dart';
-import 'app_environment.dart';
-import 'blob_store.dart';
-import 'io_blob_store.dart';
-import 'platform_capabilities.dart';
-
-/// documents ディレクトリを基点に、端末用の一式を組み立てる。
+/// 曲 JSON をパースして [List<SongEntry>] に変換する。
 ///
-/// WHY(documents を基点にするか): キーは `records/records.json` と
-/// `records/images/<name>` になり、v1.0.3 以前の配置とそのまま一致する。
-/// ここを変えると既存端末の記録・画像が読めなくなる。
+/// bad row（id/title 欠如等）は [SongEntry.fromJson] が例外を投げるため、
+/// 呼び出し側（[BlobStoreSongRepositoryLoader.load]）で catch しスキップする。
+List<SongEntry> _parseSongJson(String json) {
+  final data = jsonDecode(json) as Map<String, dynamic>;
+  final songs = data['songs'] as List<dynamic>;
+  return songs
+      .whereType<Map<String, dynamic>>()
+      .map((row) {
+        try {
+          return SongEntry.fromJson(row);
+        } catch (_) {
+          // bad row → skip（partial failure 許容）。
+          return null;
+        }
+      })
+      .whereType<SongEntry>()
+      .toList();
+}
+
+/// IO 環境向けの [createAppEnvironment] ファクトリ。
+///
+/// `FileSongDatabaseService(blobStore:)` を注入し、`MergedSongRepository` は
+/// `BlobStoreSongRepositoryLoader` 経由で `IoBlobStore` から辞書を読む。
+///
+/// 初期ロードは `createAppEnvironment` 内で `await reload()` する（ファイル
+/// I/O は高速なので初回描画をブロックしない）。
 Future<AppEnvironment> createAppEnvironment() async {
-  final Directory documentsDirectory = await getApplicationDocumentsDirectory();
-  final BlobStore blobStore = IoBlobStore(documentsDirectory);
+  final blobStore = IoBlobStore(Directory('data'));
+
+  final songDatabaseService = FileSongDatabaseService(blobStore: blobStore);
+
+  final mainLoader = BlobStoreSongRepositoryLoader(
+    blobStore: blobStore,
+    key: SongDbPaths.mainDbRelativePath,
+    parser: _parseSongJson,
+  );
+  final additionalLoader = BlobStoreSongRepositoryLoader(
+    blobStore: blobStore,
+    key: SongDbPaths.additionalDbRelativePath,
+    parser: _parseSongJson,
+  );
+
+  final mainSongRepository = MergedSongRepository(
+    sources: const <SongRepository>[],
+    loaders: <BlobStoreSongRepositoryLoader>[mainLoader],
+  );
+  final additionalSongRepository = MergedSongRepository(
+    sources: const <SongRepository>[],
+    loaders: <BlobStoreSongRepositoryLoader>[additionalLoader],
+  );
+
+  // IO はファイル読み込みが高速なため、初期ロードをここで await する。
+  // 初回描画をブロックしない（読み込みは数 KB 程度）。
+  await mainSongRepository.reload();
+  await additionalSongRepository.reload();
 
   return AppEnvironment(
-    capabilities: const LocalCapabilities(),
     blobStore: blobStore,
-    songDatabaseService: FileSongDatabaseService(
-      blobStore: blobStore,
-    ),
-    // WHY(パスを文字列で渡すか): lib/songdb の書き込み先と lib/ocr リポジトリの
-    // 読み込み先は SongDbPaths で一致している必要がある。マージ優先順位
-    // （追加 > メイン > シード）とフォールバック判定は MergedSongRepository 側に
-    // 完結しており、ここでは素材を渡すだけに留める（DIP）。
-    mainSongRepository: DownloadedMainRepository(
-      '${documentsDirectory.path}/${SongDbPaths.mainDbRelativePath}',
-    ),
-    additionalSongRepository: LocalAdditionalRepository(
-      '${documentsDirectory.path}/${SongDbPaths.additionalDbRelativePath}',
-    ),
-    // WHY(records.json と別ファイルか): 入力の補助データであり、記録の
-    // スキーマや読み書き経路に手を入れず、破損時の影響範囲も閉じられる。
-    memoTemplateRepository: FileMemoTemplateRepository(
-      documentsDirectoryResolver: () async => documentsDirectory,
-    ),
+    songDatabaseService: songDatabaseService,
+    capabilities: const LocalCapabilities(),
+    mainSongRepository: mainSongRepository,
+    additionalSongRepository: additionalSongRepository,
   );
 }
+

@@ -176,7 +176,7 @@ void main() {
     Future<PickedFile?> Function()? picker,
     int? seedCount,
     int? totalCount,
-    VoidCallback? onDictionaryChanged,
+    Future<void> Function()? onDictionaryChanged,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -311,7 +311,7 @@ void main() {
       tester,
       service,
       picker: () async => PickedFile(name: 'additional.json', bytes: Uint8List(4)),
-      onDictionaryChanged: () => notifyCount++,
+      onDictionaryChanged: () async => notifyCount++,
     );
 
     await tester.tap(find.byKey(const ValueKey('song-db-import-button')));
@@ -448,7 +448,7 @@ void main() {
     await pumpSection(
       tester,
       service,
-      onDictionaryChanged: () => notifyCount++,
+      onDictionaryChanged: () async => notifyCount++,
     );
 
     await tester.tap(find.byKey(const ValueKey('song-db-update-button')));
@@ -469,7 +469,7 @@ void main() {
     await pumpSection(
       tester,
       service,
-      onDictionaryChanged: () => notifyCount++,
+      onDictionaryChanged: () async => notifyCount++,
     );
 
     await tester.tap(find.byKey(const ValueKey('song-db-update-button')));
