@@ -2,6 +2,7 @@
 
 import 'package:idb_shim/idb_browser.dart';
 
+import 'package:scoreyomipm/data/blob_store_memo_template_repository.dart';
 import 'package:scoreyomipm/ocr/blob_store_song_repository_loader.dart';
 import 'package:scoreyomipm/ocr/merged_song_repository.dart';
 import 'package:scoreyomipm/ocr/song_json_parser.dart';
@@ -51,5 +52,6 @@ Future<AppEnvironment> createAppEnvironment() async {
     capabilities: const WebCapabilities(),
     mainSongRepository: mainSongRepository,
     additionalSongRepository: additionalSongRepository,
+    memoTemplateRepository: BlobStoreMemoTemplateRepository(blobStore),
   );
 }
