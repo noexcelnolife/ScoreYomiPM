@@ -8,20 +8,30 @@
 // そのため `web/flutter_bootstrap.js` で `serviceWorkerSettings: null` を渡し、
 // Flutter 側の登録は止めてある。
 //
-// 方針（reports/web-pwa-plan.md）:
-//   1. install 時に保存するのは「殻」だけ（index.html など 100KB 未満）
-//   2. 大きな資産は初回アクセス時に遅延保存する
-//   3. 版が変わったら殻だけ差し替える。開いているタブは勝手にリロードしない
+// キャッシュは 3 種類。
+//   scoreyomi-shell-<版>   起動に要る殻（index.html / manifest.json / icons など）
+//   scoreyomi-build-<版>   ビルドが生成した資産（main.dart.js / canvaskit / AssetManifest …）
+//   scoreyomi-static      版に依存しない重い資産（ocr_vendor/** / assets/**/fonts/**）
+//
+// WHY(ビルド産物を版付きにするか): 版を変えたのに `main.dart.js` を古いまま返すと、
+// 「殻は新しいのにアプリは古い」状態になり更新が届かない。実際、版を持たない
+// 共通キャッシュ + stale-while-revalidate では、`Date` が 7 日以内だと
+// 再取得されず、`window.__DEPLOY_B` のような新しいアプリの印が出なかった。
+// 版付きにすれば、版が変わった読み込みで必ず取り直し、同じ版なら 1 バイトも動かさない。
+//
+// WHY(OCR 資産とフォントを版から外すか): 68.9MB + 6.5MB を版のたびに捨てると、
+// 更新のたびに 75MB を取り直すことになる。内容が変わったときだけ期限付きで
+// 静かに更新する（ASSET_MAX_AGE_MS）。
 
 'use strict';
 
 const VERSION_PATH = 'version.json';
 const SHELL_CACHE_PREFIX = 'scoreyomi-shell-';
+const BUILD_CACHE_PREFIX = 'scoreyomi-build-';
+const STATIC_CACHE = 'scoreyomi-static';
 
-// WHY(資産キャッシュに版を付けないか): OCR 資産 68.9MB と CanvasKit 38MB を
-// 版のたびに捨てると、更新のたびに 100MB を取り直すことになる。内容が変わった
-// ファイルだけを stale-while-revalidate で置き換える。
-const ASSET_CACHE = 'scoreyomi-assets';
+// 版に依存しない資産。ここに入るものは版が変わっても捨てない。
+const STATIC_PREFIXES = ['ocr_vendor/', 'assets/assets/fonts/', 'assets/fonts/'];
 
 // 起動に要る殻。ここだけは install 時に取りに行く。
 const SHELL_FILES = [
@@ -44,6 +54,12 @@ const REQUIRED_SHELL_FILES = new Set(['index.html', 'manifest.json', VERSION_PAT
 // この 3 つは小さく、版の切り替えを早く反映したいので常に取りに行く。
 const NETWORK_FIRST_FILES = new Set(['index.html', 'manifest.json', 'flutter_bootstrap.js']);
 
+// 版に依存しない資産を「裏で取り直す」までの猶予。
+const ASSET_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+// 版の確認が固まって起動を待たせ続けないための上限。
+const VERSION_TIMEOUT_MS = 5000;
+
 let currentVersion = null;
 
 /** 登録スコープ（GitHub Pages では /ScoreYomiPM/）基準の絶対 URL。 */
@@ -60,10 +76,19 @@ function relativePath(url) {
   return url.pathname.slice(scopePath.length);
 }
 
-/** version.json の版。取れなければ null（キャッシュ名には 'unknown' を使う）。 */
+function isStaticPath(path) {
+  return STATIC_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+/** version.json の版。取れなければ null（オフライン時など）。 */
 async function readVersion() {
   try {
-    const response = await fetch(scopeUrl(VERSION_PATH), { cache: 'no-store' });
+    const options = { cache: 'no-store' };
+    // 古いブラウザには AbortSignal.timeout が無い。無ければ待ち続ける（従来どおり）。
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      options.signal = AbortSignal.timeout(VERSION_TIMEOUT_MS);
+    }
+    const response = await fetch(scopeUrl(VERSION_PATH), options);
     if (!response.ok) {
       return null;
     }
@@ -93,36 +118,43 @@ async function cacheShell(version) {
   return cache;
 }
 
-async function dropStaleShellCaches(keepName) {
+/** [prefix] で始まるキャッシュを、[keepName] 以外すべて消す。 */
+async function dropCachesExcept(prefix, keepName) {
   const names = await caches.keys();
   await Promise.all(
     names
-      .filter((name) => name.startsWith(SHELL_CACHE_PREFIX) && name !== keepName)
+      .filter((name) => name.startsWith(prefix) && name !== keepName)
       .map((name) => caches.delete(name)),
   );
 }
 
 /**
- * 版が変わっていたら殻だけ差し替える。
+ * 版が変わっていたら、殻とビルド産物を新しい版に切り替える。
  *
  * WHY(開いているタブに通知しないか): 版の切り替えは次回起動時に効けばよい。
  * 実行中のタブをリロードすると入力途中のフォームが消える。
+ *
+ * WHY(戻り値を版にするか): 呼び出し側（ナビゲーション）が、この処理の完了を
+ * 待ってから index.html を返す必要がある。待たずに返すと、ページが投げる
+ * `main.dart.js` の要求が古い版のキャッシュに当たり、更新が届かない。
  */
 async function syncVersion() {
+  const current = await resolveCurrentVersion();
   const version = await readVersion();
-  // 起動直後は currentVersion が null なので、まずキャッシュ名から今の版を復元する。
-  // そこで復元せずに比べると、毎回「版が変わった」と誤認して殻を取り直してしまう。
-  if (version === null || version === (await resolveCurrentVersion())) {
-    return;
+  if (version === null || version === current) {
+    return current;
   }
   try {
     await cacheShell(version);
   } catch (error) {
     // 殻の取り直しに失敗したら、今の版のまま動かす。
-    return;
+    return current;
   }
   currentVersion = version;
-  await dropStaleShellCaches(SHELL_CACHE_PREFIX + version);
+  // 旧版の殻とビルド産物を消す。版に依存しない資産（OCR・フォント）は残す。
+  await dropCachesExcept(SHELL_CACHE_PREFIX, SHELL_CACHE_PREFIX + version);
+  await dropCachesExcept(BUILD_CACHE_PREFIX, BUILD_CACHE_PREFIX + version);
+  return version;
 }
 
 /** 保存は「できれば得」。失敗しても取得自体は成功させる。 */
@@ -200,15 +232,6 @@ async function networkFirst(path, request) {
   }
 }
 
-// 資産をキャッシュから返してよい期間。過ぎたら裏で取り直す（表示は変えない）。
-//
-// WHY(毎回取り直さないか): stale-while-revalidate を素朴に実装すると、キャッシュに
-// 当たった場合でも毎回 fetch を投げる。するとこのアプリでは 1 回の起動で
-// CanvasKit・フォント・資産を全部「確認」しに行くことになり、
-// 「2 回目以降は取りに行かない」が成立しない。変更は殻の版で検知し、
-// 資産は期限付きで静かに更新する。
-const ASSET_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-
 /** 取得したバイト列を保存する。保存できなくても取得は成功させる。 */
 async function fetchAndStore(cache, request) {
   const response = await fetch(request);
@@ -216,6 +239,60 @@ async function fetchAndStore(cache, request) {
     await writeToCache(cache, request, response.clone());
   }
   return response;
+}
+
+/**
+ * ビルド産物を返す（版付きキャッシュ、キャッシュ優先）。
+ *
+ * WHY(cache を reload にするか): 版が変わった直後の 1 回だけ走る処理なので、
+ * ブラウザの HTTP キャッシュ（GitHub Pages は max-age=600）に古い実体を
+ * 返されると「新しい版なのに古いコード」になる。必ず実体を取りに行く。
+ */
+/**
+ * SW が返す応答はブラウザの HTTP キャッシュに残さない。
+ *
+ * WHY(必要なのか): 版を変えた再読み込みで `main.dart.js` が SW に届かなかった。
+ * ブラウザが自前のキャッシュから直接返してしまい、fetch イベントが発火しないため、
+ * SW 側をどう直しても新しいビルドが動かない（実測: サーバへの要求 0 件、
+ * ページの目印も古いまま、`deliveryType=cache-storage` / `workerStart=0`）。
+ * 版の判定を SW のキャッシュだけに一本化するため、SW が返す応答は
+ * キャッシュさせない。これで次の読み込みは必ず SW を通る。
+ */
+function noStore(response) {
+  if (!response || response.type === 'opaque') {
+    return response;
+  }
+  const headers = new Headers(response.headers);
+  headers.set('cache-control', 'no-store');
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+async function buildFirst(request) {
+  const version = await resolveCurrentVersion();
+  const cache = await caches.open(BUILD_CACHE_PREFIX + version);
+  const cached = await cache.match(request);
+  if (cached) {
+    return cached;
+  }
+  return fetchAndStore(cache, new Request(request, { cache: 'reload' }));
+}
+
+/** 版に依存しない資産を返す。期限を過ぎたものだけ裏で取り直す。 */
+async function staticFirst(event, request) {
+  const cache = await caches.open(STATIC_CACHE);
+  const cached = await cache.match(request);
+  if (!cached) {
+    return fetchAndStore(cache, request);
+  }
+  if (isStale(cached)) {
+    // 表にはキャッシュを返し、裏で更新する。結果は次回以降に効く。
+    event.waitUntil(fetchAndStore(cache, request).catch(() => undefined));
+  }
+  return cached;
 }
 
 /** キャッシュ済みの応答が古いかどうか。日付が無いものは古くない扱い。 */
@@ -226,19 +303,6 @@ function isStale(response) {
   }
   const age = Date.now() - Date.parse(servedAt);
   return Number.isFinite(age) && age > ASSET_MAX_AGE_MS;
-}
-
-async function staleWhileRevalidate(event, request) {
-  const cache = await caches.open(ASSET_CACHE);
-  const cached = await cache.match(request);
-  if (cached) {
-    if (isStale(cached)) {
-      // 表にはキャッシュを返し、裏で更新する。結果は次回以降に効く。
-      event.waitUntil(fetchAndStore(cache, request).catch(() => undefined));
-    }
-    return cached;
-  }
-  return fetchAndStore(cache, request);
 }
 
 self.addEventListener('install', (event) => {
@@ -257,10 +321,9 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      if (currentVersion === null) {
-        currentVersion = (await readVersion()) ?? 'unknown';
-      }
-      await dropStaleShellCaches(SHELL_CACHE_PREFIX + currentVersion);
+      const version = await resolveCurrentVersion();
+      await dropCachesExcept(SHELL_CACHE_PREFIX, SHELL_CACHE_PREFIX + version);
+      await dropCachesExcept(BUILD_CACHE_PREFIX, BUILD_CACHE_PREFIX + version);
       await self.clients.claim();
     })(),
   );
@@ -286,13 +349,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   if (request.mode === 'navigate' || path.length === 0) {
-    event.respondWith(networkFirst('index.html', request));
-    event.waitUntil(syncVersion());
+    // WHY(版の確定を待つか): ここを待たずに index.html を返すと、ページが投げる
+    // `main.dart.js` の要求が古い版のキャッシュに当たり、更新が届かない。
+    event.respondWith(
+      (async () => {
+        await syncVersion();
+        return noStore(await networkFirst('index.html', request));
+      })(),
+    );
     return;
   }
   if (NETWORK_FIRST_FILES.has(path)) {
-    event.respondWith(networkFirst(path, request));
+    event.respondWith(networkFirst(path, request).then(noStore));
     return;
   }
-  event.respondWith(staleWhileRevalidate(event, request));
+  if (isStaticPath(path)) {
+    event.respondWith(staticFirst(event, request).then(noStore));
+    return;
+  }
+  event.respondWith(buildFirst(request).then(noStore));
 });
