@@ -216,14 +216,14 @@ class LiveSongTitleSearch {
       // S3: 注入された MergedSongRepository は reload() し、BlobStore から辞書を
       // 読み直すことで、取り込み直後の新曲が次検索から反映される（spec §2.4）。
       final List<SongRepository> sources = <SongRepository>[];
-      if (additionalSongRepository is MergedSongRepository) {
-        await (additionalSongRepository as MergedSongRepository).reload();
+      if (additionalSongRepository is ReloadableSongRepository) {
+        await (additionalSongRepository as ReloadableSongRepository).reload();
       }
       if (additionalSongRepository != null) {
         sources.add(additionalSongRepository!);
       }
-      if (mainSongRepository is MergedSongRepository) {
-        await (mainSongRepository as MergedSongRepository).reload();
+      if (mainSongRepository is ReloadableSongRepository) {
+        await (mainSongRepository as ReloadableSongRepository).reload();
       }
       if (mainSongRepository != null) {
         sources.add(mainSongRepository!);

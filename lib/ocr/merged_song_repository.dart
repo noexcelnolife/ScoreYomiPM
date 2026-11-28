@@ -17,7 +17,7 @@ import 'package:scoreyomipm/ocr/song_repository.dart';
 ///   1. localAdditional（ユーザー追加オーバーレイ）
 ///   2. downloadedMain（配信サーバーDL済みメインDB）
 ///   3. bundledSeed（アセットJSON・オフラインフォールバック）
-class MergedSongRepository implements SongRepository {
+class MergedSongRepository implements SongRepository, ReloadableSongRepository {
   MergedSongRepository({
     required List<SongRepository> sources,
     required this.loaders,
@@ -50,6 +50,12 @@ class MergedSongRepository implements SongRepository {
 
   @override
   int get length => _allSongs.length;
+
+  List<SongEntry> findCandidates(String query) {
+    if (query.isEmpty) return const <SongEntry>[];
+    final q = query.toLowerCase();
+    return _allSongs.where((e) => e.title.toLowerCase().contains(q)).toList();
+  }
 
   @override
   bool containsNormalizedKey(String normalizedKey) =>
@@ -88,6 +94,7 @@ class MergedSongRepository implements SongRepository {
   /// 取り込み直後に呼び出すことで、新しい曲がすぐに検索に出るようにする。
   /// 各ローダーから新しい [InMemorySongRepository] を作成し、ソース差し替え後
   /// に [refresh] を実行する。
+  @override
   Future<void> reload() async {
     final sources = <SongRepository>[];
     for (final loader in loaders) {

@@ -492,15 +492,15 @@ class OcrPipeline {
       final sources = <SongRepository>[];
       final additionalRepo = additionalSongRepository;
       if (additionalRepo != null) {
-        if (additionalRepo is MergedSongRepository) {
-          await additionalRepo.reload();
+        if (additionalRepo is ReloadableSongRepository) {
+          await (additionalRepo as ReloadableSongRepository).reload();
         }
         sources.add(additionalRepo);
       }
       final mainRepo = mainSongRepository;
       if (mainRepo != null) {
-        if (mainRepo is MergedSongRepository) {
-          await mainRepo.reload();
+        if (mainRepo is ReloadableSongRepository) {
+          await (mainRepo as ReloadableSongRepository).reload();
         }
         sources.add(mainRepo);
       }

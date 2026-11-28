@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:scoreyomipm/ocr/in_memory_song_repository.dart';
 import 'package:scoreyomipm/ocr/song_entry.dart';
@@ -32,8 +33,10 @@ class BlobStoreSongRepositoryLoader {
     try {
       final entries = parser(json);
       return InMemorySongRepository(entries: entries);
-    } on FormatException catch (_) {
-      // 壊れた JSON はスキップ（空のリポジトリとして扱う）。
+    } catch (e) {
+      // 境界なので例外を握り潰さず、空リポジトリとして扱う。
+      // 壊れた JSON・songs キー欠落・行の型違いなどをすべてここで吸収する。
+      developer.log('BlobStoreSongRepositoryLoader: 壊れたデータをスキップ ($key)', error: e, name: 'BlobStoreSongRepositoryLoader');
       return InMemorySongRepository(entries: const <SongEntry>[]);
     }
   }

@@ -17,7 +17,7 @@ class InMemorySongRepository implements SongRepository {
   final String sourceName;
 
   @override
-  bool get isAvailable => true;
+  bool get isAvailable => entries.isNotEmpty;
 
   @override
   List<SongEntry> get allSongs => List.unmodifiable(entries);

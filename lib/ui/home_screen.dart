@@ -19,7 +19,6 @@ import '../models/ocr_models.dart';
 import '../ocr/field_extractor.dart';
 import '../ocr/ocr_engine.dart';
 import '../ocr/pipeline.dart';
-import '../ocr/merged_song_repository.dart';
 import '../ocr/song_entry.dart';
 import '../ocr/song_repository.dart';
 import '../ocr/song_title_matcher.dart';
@@ -292,8 +291,8 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 辞書が差し替わったときの後始末（子の SongDbSection から呼ばれる）。
   Future<void> _handleSongDbChanged() async {
     if (!mounted) return;
-    await (widget.mainSongRepository as MergedSongRepository?)?.reload();
-    await (widget.additionalSongRepository as MergedSongRepository?)?.reload();
+    await (widget.mainSongRepository as ReloadableSongRepository?)?.reload();
+    await (widget.additionalSongRepository as ReloadableSongRepository?)?.reload();
     // WHY: 古い辞書のままのキャッシュを捨て、タイトル行の件数を読み直させる。
     _liveSongSearch.invalidate();
     setState(() {

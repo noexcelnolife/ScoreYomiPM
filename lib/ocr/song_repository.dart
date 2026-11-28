@@ -31,3 +31,14 @@ abstract class SongRepository {
   /// 正規化済みキーが辞書に存在するか。
   bool containsNormalizedKey(String normalizedKey);
 }
+
+/// 明示的に `reload()` を持つリポジトリのインターフェース。
+///
+/// ISP（インターフェース分離の原則）により、`reload()` が不要な実装を
+/// `MergedSongRepository` などの具体型にキャストせずに扱える。
+abstract class ReloadableSongRepository {
+  /// データを再読み込みする（BlobStore やファイルから最新の辞書を取り直す）。
+  ///
+  /// 取り込み直後など、注入済みリポジトリの内容を最新に保つために呼ばれる。
+  Future<void> reload();
+}

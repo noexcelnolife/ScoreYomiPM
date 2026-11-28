@@ -1,38 +1,17 @@
 // ST-7 プラットフォーム環境（IO / Android）
 
-import 'dart:convert';
-import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
+import 'package:scoreyomipm/data/memo_template_repository.dart';
 import 'package:scoreyomipm/ocr/blob_store_song_repository_loader.dart';
 import 'package:scoreyomipm/ocr/merged_song_repository.dart';
-import 'package:scoreyomipm/ocr/song_entry.dart';
+import 'package:scoreyomipm/ocr/song_json_parser.dart';
 import 'package:scoreyomipm/ocr/song_repository.dart';
 import 'package:scoreyomipm/platform/app_environment.dart';
 import 'package:scoreyomipm/platform/io_blob_store.dart';
 import 'package:scoreyomipm/platform/platform_capabilities.dart';
 import 'package:scoreyomipm/songdb/song_db_paths.dart';
 import 'package:scoreyomipm/songdb/song_database_service.dart';
-
-/// 曲 JSON をパースして [List<SongEntry>] に変換する。
-///
-/// bad row（id/title 欠如等）は [SongEntry.fromJson] が例外を投げるため、
-/// 呼び出し側（[BlobStoreSongRepositoryLoader.load]）で catch しスキップする。
-List<SongEntry> _parseSongJson(String json) {
-  final data = jsonDecode(json) as Map<String, dynamic>;
-  final songs = data['songs'] as List<dynamic>;
-  return songs
-      .whereType<Map<String, dynamic>>()
-      .map((row) {
-        try {
-          return SongEntry.fromJson(row);
-        } catch (_) {
-          // bad row → skip（partial failure 許容）。
-          return null;
-        }
-      })
-      .whereType<SongEntry>()
-      .toList();
-}
 
 /// IO 環境向けの [createAppEnvironment] ファクトリ。
 ///
@@ -46,19 +25,20 @@ List<SongEntry> _parseSongJson(String json) {
 /// バックアップ復元直後（S5）の 4 か所で行う。OCR は元々数秒かかる処理なので、
 /// IndexedDB/ファイルからの 1MB 読みコストはその中に隠れる。
 Future<AppEnvironment> createAppEnvironment() async {
-  final blobStore = IoBlobStore(Directory('data'));
+  final documentsDirectory = await getApplicationDocumentsDirectory();
+  final blobStore = IoBlobStore(documentsDirectory);
 
   final songDatabaseService = FileSongDatabaseService(blobStore: blobStore);
 
   final mainLoader = BlobStoreSongRepositoryLoader(
     blobStore: blobStore,
     key: SongDbPaths.mainDbRelativePath,
-    parser: _parseSongJson,
+    parser: parseSongsJson,
   );
   final additionalLoader = BlobStoreSongRepositoryLoader(
     blobStore: blobStore,
     key: SongDbPaths.additionalDbRelativePath,
-    parser: _parseSongJson,
+    parser: parseSongsJson,
   );
 
   final mainSongRepository = MergedSongRepository(
@@ -76,6 +56,8 @@ Future<AppEnvironment> createAppEnvironment() async {
     capabilities: const LocalCapabilities(),
     mainSongRepository: mainSongRepository,
     additionalSongRepository: additionalSongRepository,
+    memoTemplateRepository: FileMemoTemplateRepository(
+      documentsDirectoryResolver: () async => documentsDirectory,
+    ),
   );
 }
-
