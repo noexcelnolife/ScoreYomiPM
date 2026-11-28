@@ -7,6 +7,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:scoreyomipm/ocr/song_dictionary.dart';
 import 'package:scoreyomipm/ocr/song_title_normalizer.dart';
 
+/// GtCsvSongDictionary テスト用フィクスチャパス。
+/// docs/ は .gitignore で未追跡なので、クリーン clone 時には無くてもテストを
+/// 赤にしないため skip: で制御する。
+const csvPath = 'docs/ground_truth_template.csv';
+
 void main() {
   group('StaticSongDictionary', () {
     test('空リストでは length 0、contains は false', () {
@@ -39,10 +44,8 @@ void main() {
   });
 
   group('GtCsvSongDictionary', () {
-    test('docs/ground_truth_template.csv から曲名を読込', () {
-      final csvPath = 'docs/ground_truth_template.csv';
-      expect(File(csvPath).existsSync(), isTrue, reason: 'GT CSV が存在すること');
-
+    test('docs/ground_truth_template.csv から曲名を読込',
+        skip: !File(csvPath).existsSync(), () {
       final dict = GtCsvSongDictionary(csvPath);
       expect(dict.length, greaterThan(0));
 
@@ -51,15 +54,17 @@ void main() {
       expect(dict.contains('金縛りの逢を'), isTrue);
     });
 
-    test('曲名が空欄の行はスキップされる', () {
-      final dict = GtCsvSongDictionary('docs/ground_truth_template.csv');
+    test('曲名が空欄の行はスキップされる',
+        skip: !File(csvPath).existsSync(), () {
+      final dict = GtCsvSongDictionary(csvPath);
       // 既存30枚の空曲名行（al9lbl, 5p1lg4, kt1odi, yb5h8w, bet7t4, enco0h, s4i71t, z29mk5）はスキップ
       // scr001-009 はすべて曲名ありなので length >= 9
       expect(dict.length, greaterThanOrEqualTo(9));
     });
 
-    test('originalTitle で元表記を取得', () {
-      final dict = GtCsvSongDictionary('docs/ground_truth_template.csv');
+    test('originalTitle で元表記を取得',
+        skip: !File(csvPath).existsSync(), () {
+      final dict = GtCsvSongDictionary(csvPath);
       final normalized = normalizeSongTitle('黒髪乱れし修羅となりて');
       expect(dict.originalTitle(normalized), isNotNull);
     });
