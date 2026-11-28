@@ -15,8 +15,11 @@ abstract class PlatformCapabilities {
   /// 他アプリからの共有インテントを受け取れるか。
   bool get canReceiveShareIntent;
 
-  /// 曲データベースの配信更新（URL 取得・追加 JSON の取り込み）ができるか。
-  bool get canUpdateSongDatabase;
+  /// 配信 URL からの取得・更新ができるか。
+  bool get canUpdateSongDatabaseFromUrl;
+
+  /// ローカル JSON の取り込みができるか。
+  bool get canImportSongDatabaseJson;
 }
 
 /// 端末アプリ（Android/iOS 相当）の能力。すべて有効。
@@ -30,5 +33,8 @@ class LocalCapabilities implements PlatformCapabilities {
   bool get canReceiveShareIntent => true;
 
   @override
-  bool get canUpdateSongDatabase => true;
+  bool get canUpdateSongDatabaseFromUrl => true;
+
+  @override
+  bool get canImportSongDatabaseJson => true;
 }

@@ -5,7 +5,6 @@
 // （シード・メイン・追加の優先順位統合）は OCR-Core 側の MergedSongRepository
 // に完結しており、本サービスは「辞書ファイルをディスクに置く」ことのみを責務とする。
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -503,7 +502,7 @@ class FileSongDatabaseService implements SongDatabaseService {
     final http.Client client = _httpClientFactory();
     try {
       final http.Response response = await client.get(Uri.parse(url));
-      if (response.statusCode != HttpStatus.ok) {
+      if (response.statusCode != 200) {
         throw Exception('HTTP ${response.statusCode}');
       }
       final dynamic decoded = jsonDecode(response.body);

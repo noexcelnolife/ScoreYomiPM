@@ -21,5 +21,8 @@ class WebCapabilities implements PlatformCapabilities {
   bool get canReceiveShareIntent => false;
 
   @override
-  bool get canUpdateSongDatabase => false;
+  bool get canUpdateSongDatabaseFromUrl => false;
+
+  @override
+  bool get canImportSongDatabaseJson => true;
 }

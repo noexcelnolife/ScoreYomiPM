@@ -919,13 +919,8 @@ class _HomeScreenState extends State<HomeScreen> {
   /// WHY: 実利用では毎回操作しないため既定は閉じて画面ノイズを減らす。
   /// 展開時のみ SongDbSection（ヘッダ無し）を表示する。
   Widget _buildSongDbSection() {
-    // WHY(能力が無い環境では節ごと出さないか): 辞書の配信更新・追加取り込みは
-    // 端末のファイルを差し替える操作で、ブラウザには該当する保存先が無い。
-    // 押すと必ず失敗する入口を残すより、節そのものを出さない方が誤解が少ない。
-    // 曲名のサジェストは同梱シードで動くため、この節を隠しても検索は成立する。
-    if (!widget.capabilities.canUpdateSongDatabase) {
-      return const SizedBox.shrink();
-    }
+    // WHY: 能力フラグ（canUpdateSongDatabaseFromUrl / canImportSongDatabaseJson）
+    // で UI を出し分けるため、本節はプラットフォーム共通で常に描画する。
     return ExpansionTile(
       title: const Text('収録曲辞書'),
       // WHY(案A): 折りたたみ中でも辞書の規模が分かるよう、サジェスト対象の
@@ -942,6 +937,8 @@ class _HomeScreenState extends State<HomeScreen> {
           seedSongCount: _liveSongSearch.seedSongCount,
           totalSongCount: _liveSongSearch.totalSongCount,
           onDictionaryChanged: _handleSongDbChanged,
+          canUpdateFromUrl: widget.capabilities.canUpdateSongDatabaseFromUrl,
+          canImportJson: widget.capabilities.canImportSongDatabaseJson,
         ),
       ],
     );

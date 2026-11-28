@@ -177,6 +177,8 @@ void main() {
     int? seedCount,
     int? totalCount,
     Future<void> Function()? onDictionaryChanged,
+    bool canUpdateFromUrl = true,
+    bool canImportJson = true,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -187,6 +189,8 @@ void main() {
             seedSongCount: seedCount == null ? null : () async => seedCount,
             totalSongCount: totalCount == null ? null : () async => totalCount,
             onDictionaryChanged: onDictionaryChanged,
+            canUpdateFromUrl: canUpdateFromUrl,
+            canImportJson: canImportJson,
           ),
         ),
       ),
@@ -476,6 +480,48 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(notifyCount, 0);
+  });
+
+  testWidgets('canUpdateFromUrl=false, canImportJson=true: URL 項と更新ボタンは無く、注記＋取り込みボタンを表示する', (tester) async {
+    final _FakeSongDatabaseService service = _FakeSongDatabaseService();
+    await pumpSection(
+      tester,
+      service,
+      canUpdateFromUrl: false,
+      canImportJson: true,
+    );
+
+    expect(find.byKey(const ValueKey('song-db-url-field')), findsNothing);
+    expect(find.byKey(const ValueKey('song-db-update-button')), findsNothing);
+    expect(find.byKey(const ValueKey('song-db-import-button')), findsOneWidget);
+    expect(
+      find.text(
+        'ブラウザ版では配信 URL からの更新はできません。JSON ファイルから追加できます。',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('必要な項目は id と title だけです。'), findsOneWidget);
+  });
+
+  testWidgets('canImportJson=false: 追加DB取り込みボタンは無く、URL 項＋更新ボタンは残る', (tester) async {
+    final _FakeSongDatabaseService service = _FakeSongDatabaseService();
+    await pumpSection(
+      tester,
+      service,
+      canUpdateFromUrl: true,
+      canImportJson: false,
+    );
+
+    expect(find.byKey(const ValueKey('song-db-url-field')), findsOneWidget);
+    expect(find.byKey(const ValueKey('song-db-update-button')), findsOneWidget);
+    expect(find.byKey(const ValueKey('song-db-import-button')), findsNothing);
+    expect(
+      find.text(
+        'ブラウザ版では配信 URL からの更新はできません。JSON ファイルから追加できます。',
+      ),
+      findsNothing,
+    );
+    expect(find.text('必要な項目は id と title だけです。'), findsNothing);
   });
 
   group('SongDbTotalCountSubtitle', () {

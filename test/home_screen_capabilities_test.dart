@@ -110,14 +110,28 @@ void main() {
       expect(find.text('スコア手入力'), findsOneWidget);
     });
 
-    testWidgets('収録曲辞書の節を出さない（配信更新・追加取り込みができないため）', (
+    testWidgets('収録曲辞書の節は常に出る（Web は更新 URL 無し・追加取り込み有り）', (
       WidgetTester tester,
     ) async {
       await _pumpHome(tester, const WebCapabilities());
 
-      // WHY: 押すと必ず失敗する操作の入口は、節ごと隠す（設計判断）。
-      // 曲名サジェストは同梱シードで動くので、隠しても検索は成立する。
-      expect(find.text('収録曲辞書'), findsNothing);
+      // WHY: 節自体は常に描画し、能力フラグで中身を出し分ける。
+      expect(find.text('収録曲辞書'), findsOneWidget);
+      // ExpansionTile は折りたたみ状態なので、子ウィジェットを確認する前に開く。
+      await tester.tap(find.text('収録曲辞書'));
+      await tester.pumpAndSettle();
+
+      // Web（canUpdateFromUrl=false）: URL フィールドと更新ボタンは無い。
+      expect(find.byKey(const ValueKey('song-db-url-field')), findsNothing);
+      expect(find.byKey(const ValueKey('song-db-update-button')), findsNothing);
+      // Web（canImportJson=true）: 追加取り込みボタンと注記はある。
+      expect(find.byKey(const ValueKey('song-db-import-button')), findsOneWidget);
+      expect(
+        find.text(
+          'ブラウザ版では配信 URL からの更新はできません。JSON ファイルから追加できます。',
+        ),
+        findsOneWidget,
+      );
     });
   });
 

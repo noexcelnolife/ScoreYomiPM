@@ -49,6 +49,8 @@ class SongDbSection extends StatefulWidget {
     this.seedSongCount,
     this.totalSongCount,
     this.onDictionaryChanged,
+    this.canUpdateFromUrl = true,
+    this.canImportJson = true,
   });
 
   /// 収録曲 DB 操作サービス（抽象にのみ依存する・DIP）。
@@ -56,6 +58,12 @@ class SongDbSection extends StatefulWidget {
 
   /// 見出し「収録曲辞書」を表示するか。false で埋め込み先が見出しを持つ。
   final bool showHeader;
+
+  /// 配信 URL からの取得・更新 UI（URL 入力欄・更新ボタン）を表示するか。
+  final bool canUpdateFromUrl;
+
+  /// ローカル JSON の追加取り込みボタンを表示するか。
+  final bool canImportJson;
 
   /// 追加 DB の JSON ファイルを選択する関数。null でキャンセル。
   ///
@@ -266,45 +274,65 @@ class _SongDbSectionState extends State<SongDbSection> {
               Text('収録曲辞書', style: theme.textTheme.titleSmall),
               const SizedBox(height: 8),
             ],
-            TextField(
-              key: const ValueKey('song-db-url-field'),
-              controller: _urlController,
-              enabled: !_isBusy,
-              keyboardType: TextInputType.url,
-              decoration: const InputDecoration(
-                labelText: '配信URL',
-                hintText: 'https://…/main_v1.json（空なら内蔵辞書）',
-                border: OutlineInputBorder(),
+            if (widget.canUpdateFromUrl) ...<Widget>[
+              TextField(
+                key: const ValueKey('song-db-url-field'),
+                controller: _urlController,
+                enabled: !_isBusy,
+                keyboardType: TextInputType.url,
+                decoration: const InputDecoration(
+                  labelText: '配信URL',
+                  hintText: 'https://…/main_v1.json（空なら内蔵辞書）',
+                  border: OutlineInputBorder(),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
+              const SizedBox(height: 8),
+            ],
+            if (!widget.canUpdateFromUrl && widget.canImportJson) ...<Widget>[
+              Text(
+                'ブラウザ版では配信 URL からの更新はできません。JSON ファイルから追加できます。',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+              ),
+              const SizedBox(height: 8),
+            ],
             Row(
               children: <Widget>[
-                Expanded(
-                  child: FilledButton(
-                    key: const ValueKey('song-db-update-button'),
-                    onPressed: _isBusy
-                        ? null
-                        : () {
-                            _runUpdate(saveUrlFromField: true);
-                          },
-                    child: const Text('DB取得・更新'),
+                if (widget.canUpdateFromUrl) ...<Widget>[
+                  Expanded(
+                    child: FilledButton(
+                      key: const ValueKey('song-db-update-button'),
+                      onPressed: _isBusy
+                          ? null
+                          : () {
+                              _runUpdate(saveUrlFromField: true);
+                            },
+                      child: const Text('DB取得・更新'),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton(
-                    key: const ValueKey('song-db-import-button'),
-                    onPressed: _isBusy
-                        ? null
-                        : () {
-                            _importAdditional();
-                          },
-                    child: const Text('追加DBを取り込み'),
+                  const SizedBox(width: 8),
+                ],
+                if (widget.canImportJson) ...<Widget>[
+                  Expanded(
+                    child: OutlinedButton(
+                      key: const ValueKey('song-db-import-button'),
+                      onPressed: _isBusy
+                          ? null
+                          : () {
+                              _importAdditional();
+                            },
+                      child: const Text('追加DBを取り込み'),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
+            if (widget.canImportJson) ...<Widget>[
+              const SizedBox(height: 8),
+              Text(
+                '必要な項目は id と title だけです。',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+              ),
+            ],
             if (_isBusy) ...<Widget>[
               const SizedBox(height: 8),
               const LinearProgressIndicator(),
