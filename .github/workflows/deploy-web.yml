@@ -1,0 +1,86 @@
+# GitHub Pages への公開。**自動デプロイはしない**（reports/web-decisions.md D-W12）。
+#
+# WHY workflow_dispatch だけか: push のたびに公開されると、壊れたビルドや検証前の状態が
+# そのまま利用者に届く。公開は人が明示的に押したときだけ行う。
+#
+# WHY tool/build_web.mjs を通すか: Web ビルドは 3 つの前提を同時に満たさないと壊れる（D-W17）。
+#   1. OCR 資産の生成（web/ocr_vendor/ は追跡外）
+#   2. --base-href（無いとサブパスで真っ白）
+#   3. --no-web-resources-cdn（無いと CanvasKit を gstatic から取る）
+# スクリプトはビルド後に 1 と 3 を検査し、外れていれば終了コード 1 で止まる。
+name: Deploy Web
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'ビルドするブランチまたはタグ（空なら実行した ref）'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 公開は直列化する。同時実行すると Pages のデプロイが競合する。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: チェックアウト
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Node.js を用意
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Flutter を用意
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.1'
+          channel: stable
+          cache: true
+
+      - name: 依存を取得
+        run: flutter pub get
+
+      # 壊れたものを公開しないための関門。docs/ground_truth_template.csv は追跡外なので、
+      # 該当テストは skip される（D-W15）。
+      - name: 静的解析
+        run: flutter analyze
+
+      - name: テスト
+        run: flutter test
+
+      - name: Web 配布物を作る
+        env:
+          # tool/build_web.mjs の既定は Windows の開発機のパス。CI では PATH 上の flutter を使う。
+          FLUTTER: flutter
+        run: node tool/build_web.mjs --base-href /ScoreYomiPM/
+
+      - name: Pages の設定を読む
+        uses: actions/configure-pages@v5
+
+      - name: 成果物をアップロード
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 公開
+        id: deployment
+        uses: actions/deploy-pages@v4
