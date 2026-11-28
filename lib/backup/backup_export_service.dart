@@ -3,12 +3,16 @@
 // WHY: ZIP と CSV は保存先選択（UI 側）に渡すバイト列/文字列として作り、
 // この層では保存ダイアログを出さない。UI とデータ層の責務を分けておくと、
 // 保存先の選択ミスや権限エラーを UI 側で一元的に扱える。
+import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:typed_data';
 
 import '../data/memo_template.dart';
 import '../data/memo_template_repository.dart';
 import '../data/play_record.dart';
 import '../data/play_record_repository.dart';
+import '../platform/blob_store.dart';
+import '../songdb/song_db_paths.dart';
 import 'backup_archive_codec.dart';
 import 'backup_csv_encoder.dart';
 import 'backup_manifest.dart';
@@ -19,6 +23,7 @@ class BackupExportService {
     required this._repository,
     required this._appVersion,
     this._memoTemplateRepository,
+    required this._blobStore,
     this._codec = const BackupArchiveCodec(),
     this._csvEncoder = const BackupCsvEncoder(),
     this._clock = DateTime.now,
@@ -36,12 +41,39 @@ class BackupExportService {
   /// 既存の呼び出し側・テストを壊さない後方互換のため任意注入にする。
   final MemoTemplateRepository? _memoTemplateRepository;
 
+  /// ファイル保存先（追加辞書の読み出しに使用）。
+  final BlobStore _blobStore;
+
   /// 全レコードと画像（とメモのテンプレート）を ZIP バイト列にする。
   Future<Uint8List> buildZip() async {
     final List<PlayRecord> records = await _repository.listAll();
     final Map<String, Uint8List> imagesById = await _loadImages(records);
     final List<MemoTemplate> templates =
         await _memoTemplateRepository?.listAll() ?? const <MemoTemplate>[];
+
+    // WHY: 追加辞書は存在するときだけ ZIP に入れる。無い ZIP は旧形式と同等で、
+    // 復元側は辞書を更新しない（扱いは「変更なし」と同じ）。
+    String? additionalSongs;
+    int additionalSongCount = 0;
+    try {
+      final bytes = await _blobStore.read(SongDbPaths.additionalDbRelativePath);
+      if (bytes != null) {
+        additionalSongs = utf8.decode(bytes);
+        final decoded = jsonDecode(additionalSongs) as Map<String, dynamic>;
+        final songs = decoded['songs'] as List? ?? const <dynamic>[];
+        additionalSongCount = songs.length;
+      }
+    } on Object catch (error) {
+      // 追加辞書の読み出しに失敗してもバックアップ自体は作る（変化なしとみなす）。
+      // エントリは書かず、developer に警告を残す。
+      additionalSongs = null;
+      additionalSongCount = 0;
+      developer.log(
+        '追加辞書の読み出しに失敗しました。辞書なしでバックアップを続行します。',
+        name: 'backup_export_service',
+        error: error,
+      );
+    }
 
     return _codec.encode(
       manifest: BackupManifest(
@@ -50,10 +82,12 @@ class BackupExportService {
         recordCount: records.length,
         imageCount: imagesById.length,
         templateCount: templates.length,
+        additionalSongCount: additionalSongCount,
       ),
       records: records,
       imagesById: imagesById,
       templates: templates,
+      additionalSongs: additionalSongs,
     );
   }
 

@@ -13,6 +13,7 @@ class BackupManifest {
     required this.recordCount,
     required this.imageCount,
     this.templateCount = 0,
+    this.additionalSongCount = 0,
     this.format = backupFormat,
     this.schemaVersion = currentSchemaVersion,
   });
@@ -38,6 +39,12 @@ class BackupManifest {
   /// 読み、records/画像の復元はそのまま続行する（前方互換）。
   final int templateCount;
 
+  /// 同梱した追加辞書の曲数（欠落時 0）。
+  ///
+  /// WHY 省略可能（既定 0）か: 追加辞書同梱より前に作られた ZIP にはこのキーが
+  /// 無い。欠落は 0 として読み、records/画像/テンプレートの復元はそのまま続行する。
+  final int additionalSongCount;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     'format': format,
     'schemaVersion': schemaVersion,
@@ -47,6 +54,7 @@ class BackupManifest {
     'recordCount': recordCount,
     'imageCount': imageCount,
     'templateCount': templateCount,
+    if (additionalSongCount > 0) 'additionalSongCount': additionalSongCount,
   };
 
   /// JSON から読む。未知キーは読み捨て、型不一致は [BackupFormatException]。
@@ -59,6 +67,7 @@ class BackupManifest {
       recordCount: _readInt(json, 'recordCount'),
       imageCount: _readInt(json, 'imageCount'),
       templateCount: _readIntOr(json, 'templateCount', 0),
+      additionalSongCount: _readIntOr(json, 'additionalSongCount', 0),
     );
   }
 

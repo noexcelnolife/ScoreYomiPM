@@ -6,6 +6,7 @@
 // 入出力だけをフェイクに差し替え、ZIP/CSV の生成と復元は本物のサービスを通す
 //（データ層との結線まで含めて壊れていないことを確認する）。
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
@@ -18,6 +19,7 @@ import 'package:scoreyomipm/backup/backup_format_exception.dart';
 import 'package:scoreyomipm/backup/backup_import_service.dart';
 import 'package:scoreyomipm/data/play_record.dart';
 import 'package:scoreyomipm/data/play_record_bulk_writer.dart';
+import 'package:scoreyomipm/platform/io_blob_store.dart';
 import 'package:scoreyomipm/ui/file_export_gateway.dart';
 import 'package:scoreyomipm/ui/backup_screen.dart';
 
@@ -116,10 +118,12 @@ _Harness _harness({
     exportService: BackupExportService(
       repository: repository,
       appVersion: kAppVersion,
+      blobStore: IoBlobStore(Directory.systemTemp),
     ),
     importService: BackupImportService(
       listRecords: () async => existingRecords,
       writer: writer,
+      blobStore: IoBlobStore(Directory.systemTemp),
     ),
     writer: writer,
     gateway: _FakeGateway(savePath: savePath),
@@ -210,6 +214,9 @@ void main() {
     await tester.pumpWidget(_screen(harness));
 
     await tester.tap(find.byKey(const ValueKey<String>('backup-export-zip')));
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
     await tester.pumpAndSettle();
 
     expect(harness.gateway.saveCount, 1);
@@ -260,6 +267,9 @@ void main() {
     await tester.pumpWidget(_screen(harness));
 
     await tester.tap(find.byKey(const ValueKey<String>('backup-export-zip')));
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
     await tester.pumpAndSettle();
 
     expect(harness.gateway.saveCount, 1);

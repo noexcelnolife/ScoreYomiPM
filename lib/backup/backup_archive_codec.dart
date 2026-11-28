@@ -33,6 +33,8 @@ class BackupArchive {
     required this.imagesById,
     required this.warnings,
     this.templates = const <MemoTemplate>[],
+    this.additionalSongs,
+    this.additionalSongCount = 0,
   });
 
   final BackupManifest manifest;
@@ -51,6 +53,15 @@ class BackupArchive {
   /// WHY 空を既定にするか: テンプレート同梱前の ZIP でも同じ経路で復元したい
   /// （「テンプレートが無い」は異常ではなく、単に同梱されていないだけ）。
   final List<MemoTemplate> templates;
+
+  /// 追加辞書の生 JSON（無ければ null）。
+  ///
+  /// WHY 生 JSON か: ユーザーが ZIP から取り出して「JSON ファイルから追加」に
+  /// そのまま使える形にする（雛形の役割も兼ねる）。
+  final String? additionalSongs;
+
+  /// 追加辞書の曲数（manifest に記録、欠落時 0）。
+  final int additionalSongCount;
 }
 
 /// バックアップ ZIP のエンコーダ兼デコーダ。
@@ -61,6 +72,7 @@ class BackupArchiveCodec {
   static const String recordsFileName = 'records.json';
   static const String imagesDirectoryName = 'images';
   static const String memoTemplatesFileName = 'memo_templates.json';
+  static const String additionalSongsFileName = 'additional_songs.json';
 
   /// レコードと画像を ZIP バイト列へ変換する。
   ///
@@ -71,6 +83,7 @@ class BackupArchiveCodec {
     required List<PlayRecord> records,
     required Map<String, Uint8List> imagesById,
     List<MemoTemplate> templates = const <MemoTemplate>[],
+    String? additionalSongs,
   }) {
     final Map<String, String> relativePathByRecordId = _relativePaths(
       imagesById.keys,
@@ -87,6 +100,14 @@ class BackupArchiveCodec {
     _addJsonEntry(archive, memoTemplatesFileName, <Map<String, dynamic>>[
       for (final MemoTemplate template in templates) template.toJson(),
     ]);
+    // 追加辞書は存在するときだけエントリを書く（無い ZIP と同等に扱うため）。
+    if (additionalSongs != null) {
+      _addJsonEntry(
+        archive,
+        additionalSongsFileName,
+        jsonDecode(additionalSongs) as Object,
+      );
+    }
 
     for (final MapEntry<String, Uint8List> entry in imagesById.entries) {
       // WHY: JPEG/PNG は既に圧縮済みで、再圧縮は画質劣化と処理時間増にしか
@@ -124,6 +145,8 @@ class BackupArchiveCodec {
       imagesById: imagesById,
       warnings: warnings,
       templates: _readMemoTemplates(archive, warnings),
+      additionalSongs: _readAdditionalSongs(archive, warnings),
+      additionalSongCount: manifest.additionalSongCount,
     );
   }
 
@@ -169,6 +192,47 @@ class BackupArchiveCodec {
       }
     }
     return templates;
+  }
+
+  /// `additional_songs.json` を読む（無ければ null・壊れていても復元は続行）。
+  ///
+  /// WHY 例外にしないか: 追加辞書は記録の本体とは独立しており、その 1 ファイルの
+  /// 破損で記録の復元を止めるのは釣り合わない。破損は warnings に積んで利用者に
+  /// 知らせる。
+  String? _readAdditionalSongs(
+    Archive archive,
+    List<String> warnings,
+  ) {
+    final ArchiveFile? file = archive.find(additionalSongsFileName);
+    if (file == null) {
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(utf8.decode(file.content));
+      if (decoded is! Map<String, dynamic>) {
+        warnings.add('$additionalSongsFileName の形式が不正なため、追加辞書は復元しません。');
+        developer.log(
+          '$additionalSongsFileName の形式が不正',
+          name: 'backup_archive_codec',
+        );
+        return null;
+      }
+      return utf8.decode(file.content);
+    } on BackupFormatException catch (error) {
+      warnings.add('$additionalSongsFileName を読み取れないため、追加辞書は復元しません。');
+      developer.log(
+        '$additionalSongsFileName の復号に失敗: $error',
+        name: 'backup_archive_codec',
+      );
+      return null;
+    } on FormatException catch (error) {
+      warnings.add('$additionalSongsFileName を読み取れないため、追加辞書は復元しません。');
+      developer.log(
+        '$additionalSongsFileName の復号に失敗: $error',
+        name: 'backup_archive_codec',
+      );
+      return null;
+    }
   }
 
   Map<String, String> _relativePaths(Iterable<String> imageFileNames) {

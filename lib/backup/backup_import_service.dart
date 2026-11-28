@@ -6,12 +6,16 @@
 // 画像は一時ファイルに実体化せず、ZIP から読んだバイト列のまま書き込み側へ
 // 渡す（書き込み可能なファイルシステムが無い Web でも同じ経路を通すため）。
 
+import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:typed_data';
 
 import '../data/memo_template_repository.dart';
 import '../data/play_record.dart';
 import '../data/play_record_bulk_writer.dart';
+import '../platform/blob_store.dart';
+import '../ocr/song_repository.dart';
+import '../songdb/song_db_paths.dart';
 import 'backup_archive_codec.dart';
 import 'backup_manifest.dart';
 
@@ -64,6 +68,7 @@ class BackupImportOutcome {
     required this.imagesRestored,
     required this.missingImages,
     this.templatesImported = 0,
+    this.additionalSongsRestored = false,
   });
 
   final int imported;
@@ -79,6 +84,9 @@ class BackupImportOutcome {
 
   /// 新しく追加したメモテンプレート数（既存と id が同じものは数えない）。
   final int templatesImported;
+
+  /// 追加辞書を復元できたか。
+  final bool additionalSongsRestored;
 }
 
 /// ZIP バイト列を既存データへ取り込む。
@@ -87,6 +95,8 @@ class BackupImportService {
     required this._listRecords,
     required this._writer,
     this._memoTemplateRepository,
+    required this._blobStore,
+    this._additionalSongRepository,
     this._codec = const BackupArchiveCodec(),
   });
 
@@ -96,6 +106,12 @@ class BackupImportService {
 
   /// メモテンプレートの復元先。null なら復元しない（旧 ZIP・機能未使用時）。
   final MemoTemplateRepository? _memoTemplateRepository;
+
+  /// ファイル保存先（追加辞書の書き込みに使用）。
+  final BlobStore _blobStore;
+
+  /// 追加辞書リポジトリ（復元後に `reload()` して表示を更新するため）。
+  final ReloadableSongRepository? _additionalSongRepository;
 
   /// 取り込み内容を調べる（書き込みは行わない）。
   Future<BackupImportPreview> preview(Uint8List zipBytes) async {
@@ -169,6 +185,7 @@ class BackupImportService {
       imageBytesById: imageBytesById,
     );
     final int templatesImported = await _restoreTemplates(archive);
+    final bool additionalSongsRestored = await _restoreAdditionalSongs(archive);
 
     return BackupImportOutcome(
       imported: result.imported,
@@ -178,6 +195,7 @@ class BackupImportService {
       imagesRestored: restored,
       missingImages: archive.warnings.length + result.missingImages,
       templatesImported: templatesImported,
+      additionalSongsRestored: additionalSongsRestored,
     );
   }
 
@@ -197,6 +215,37 @@ class BackupImportService {
         stackTrace: stackTrace,
       );
       return 0;
+    }
+  }
+
+  /// ZIP 内の `additional_songs.json` を `BlobStore` の `additionalDbRelativePath`
+  /// に上書きする（置換）。壊れている場合は warnings に積んで `false` を返し、
+  /// 記録の復元は続行する。
+  Future<bool> _restoreAdditionalSongs(BackupArchive archive) async {
+    final String? additionalSongs = archive.additionalSongs;
+    if (additionalSongs == null) {
+      return false;
+    }
+    final ReloadableSongRepository? repository = _additionalSongRepository;
+    try {
+      await _blobStore.write(
+        SongDbPaths.additionalDbRelativePath,
+        utf8.encode(additionalSongs),
+      );
+      if (repository != null) {
+        await repository.reload();
+      }
+      return true;
+    } on Object catch (error, stackTrace) {
+      // WHY(ここで握りつぶすか): レコードの復元は既に成功している。追加辞書だけの
+      // 失敗で「復元に失敗した」と見せると、利用者は記録が消えたと誤解する。
+      developer.log(
+        '追加辞書の復元に失敗しました',
+        name: 'BackupImportService',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return false;
     }
   }
 
