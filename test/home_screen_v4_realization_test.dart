@@ -9,6 +9,7 @@
 // (6) 記録 0 件・取得失敗時は最近の記録セクションを非表示（§2.5）
 // (7) エクスポート・インポートの導線（タスク 01a20c14・収録曲辞書の直後）
 
+import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -37,7 +38,10 @@ class _FakeSongDatabaseService implements SongDatabaseService {
       const SongDbUpdateResult(status: SongDbUpdateStatus.skippedNoUrl);
 
   @override
-  Future<SongImportResult> importAdditionalJson(String sourceFilePath) async =>
+  Future<SongImportResult> importAdditionalJson(
+    Uint8List bytes, {
+    required String fileName,
+  }) async =>
       const SongImportResult(success: false);
 
   @override

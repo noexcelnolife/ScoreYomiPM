@@ -6,6 +6,7 @@
 // に完結しており、本サービスは「辞書ファイルをディスクに置く」ことのみを責務とする。
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -35,8 +36,14 @@ abstract class SongDatabaseService {
   /// 指定 URL からメイン DB を取得・更新する（URL 未設定時は skippedNoUrl）。
   Future<SongDbUpdateResult> updateFromUrl(String url);
 
-  /// ローカル追加 DB の JSON ファイルを取り込む。
-  Future<SongImportResult> importAdditionalJson(String sourceFilePath);
+  /// ローカル追加 DB の JSON バイト列を取り込む。
+  ///
+  /// [fileName] は取り込み元のファイル名（記録・表示用）。パス文字列は
+  /// Web では開けないため、境界からパスを排除しバイト列＋名前で渡す。
+  Future<SongImportResult> importAdditionalJson(
+    Uint8List bytes, {
+    required String fileName,
+  });
 }
 
 /// [SongDatabaseService.updateFromUrl] / [updateFromConfiguredUrl] の結果状態。
@@ -186,8 +193,12 @@ class FileSongDatabaseService implements SongDatabaseService {
   }
 
   @override
-  Future<SongImportResult> importAdditionalJson(String sourceFilePath) async {
-    final SongImportResult result = await _performImport(sourceFilePath);
+  Future<SongImportResult> importAdditionalJson(
+    Uint8List bytes, {
+    required String fileName,
+  }) async {
+    final SongImportResult result =
+        await _performImport(bytes, fileName: fileName);
     await _recordLastOperation(
       SongDbLastOperation(
         kind: SongDbOperationKind.importAdditional,
@@ -201,7 +212,7 @@ class FileSongDatabaseService implements SongDatabaseService {
         songCount: result.songCount,
         // WHY: dbVersion はメイン DB のエンベロープにのみ存在する概念で、
         // 追加 DB の取り込みでは意味を持たない。
-        sourceFileName: _baseName(sourceFilePath),
+        sourceFileName: fileName,
       ),
     );
     return result;
@@ -260,9 +271,33 @@ class FileSongDatabaseService implements SongDatabaseService {
   }
 
   /// ローカル追加 DB を取り込む（記録用の情報は戻り値から取る）。
-  Future<SongImportResult> _performImport(String sourceFilePath) async {
+  ///
+  /// [bytes] はファイル選択で得たバイト列（P3 相当：Web 対応のためパス文字列を
+  /// 境界から排除）。[fileName] は表示・記録用のファイル名。
+  Future<SongImportResult> _performImport(
+    Uint8List bytes, {
+    required String fileName,
+  }) async {
+    // WHY: 空ファイルは早期に検出し、JSON パースをスキップする。
+    if (bytes.isEmpty) {
+      return const SongImportResult(
+        success: false,
+        message: '選択されたファイルが空です。',
+      );
+    }
+
+    // WHY: 5MB を超えるファイルはメモリ使用量の観点から拒否する
+    // （設計 §2.2：ファイルサイズ上限）。
+    const int maxSizeBytes = 5 * 1024 * 1024;
+    if (bytes.lengthInBytes > maxSizeBytes) {
+      return const SongImportResult(
+        success: false,
+        message: 'ファイルサイズが 5MB を超えています。',
+      );
+    }
+
     try {
-      final String content = await File(sourceFilePath).readAsString();
+      final String content = utf8.decode(bytes);
       final dynamic decoded = jsonDecode(content);
       if (decoded is! Map<String, dynamic> || decoded['songs'] is! List) {
         return const SongImportResult(
@@ -275,19 +310,18 @@ class FileSongDatabaseService implements SongDatabaseService {
       await targetFile.writeAsString(jsonEncode(decoded), flush: true);
       final List<dynamic> songs = decoded['songs'] as List<dynamic>;
       return SongImportResult(success: true, songCount: songs.length);
-    } on FileSystemException catch (_) {
-      // WHY: 選択元ファイルはキャッシュ経由の場合があり、消えると読めない。
-      // ユーザーへ再選択を促せるよう失敗メッセージを返す。
-      return const SongImportResult(
-        success: false,
-        message: 'ファイルを読み込めませんでした。',
-      );
     } on FormatException catch (_) {
       // WHY: JSON 以外のファイルを選択した場合も例外を UI へ出さず
       // 失敗結果として返す。
       return const SongImportResult(
         success: false,
         message: 'JSON として解釈できませんでした。',
+      );
+    } on FileSystemException catch (_) {
+      // WHY: 書き込み先ディレクトリの権限・ロック等で保存できない場合。
+      return const SongImportResult(
+        success: false,
+        message: 'ファイルを保存できませんでした。',
       );
     }
   }
@@ -431,9 +465,6 @@ class FileSongDatabaseService implements SongDatabaseService {
       return SongDbSourceStatus(exists: true, updatedAt: updatedAt);
     }
   }
-
-  /// パスからファイル名だけを取り出す（記録に残すのは basename のみ）。
-  String _baseName(String path) => path.split(RegExp(r'[\\/]')).last;
 
   /// 配信 URL から JSON エンベロープを取得し、最小限の検証をして返す。
   ///

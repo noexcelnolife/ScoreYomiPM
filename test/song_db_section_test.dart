@@ -1,6 +1,7 @@
 // SongDbSection のウィジェットテスト（fake サービス＋fake ピッカーで検証）。
 import 'dart:async';
 import 'dart:io' show FileSystemException;
+import 'dart:typed_data';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -103,7 +104,10 @@ class _FakeSongDatabaseService implements SongDatabaseService {
   }
 
   @override
-  Future<SongImportResult> importAdditionalJson(String sourceFilePath) async {
+  Future<SongImportResult> importAdditionalJson(
+    Uint8List bytes, {
+    required String fileName,
+  }) async {
     importCallCount++;
     final SongImportResult result = importResult;
     status = SongDatabaseStatus(
@@ -120,7 +124,7 @@ class _FakeSongDatabaseService implements SongDatabaseService {
         at: operationAt,
         message: result.success ? null : result.message,
         songCount: result.songCount,
-        sourceFileName: _baseName(sourceFilePath),
+        sourceFileName: fileName,
       ),
     );
     return result;
@@ -162,14 +166,13 @@ class _FakeSongDatabaseService implements SongDatabaseService {
     }
   }
 
-  static String _baseName(String path) => path.split(RegExp(r'[\\/]')).last;
 }
 
 void main() {
   Future<void> pumpSection(
     WidgetTester tester,
     _FakeSongDatabaseService service, {
-    Future<String?> Function()? picker,
+    Future<PickedFile?> Function()? picker,
     int? seedCount,
     int? totalCount,
     VoidCallback? onDictionaryChanged,
@@ -306,7 +309,7 @@ void main() {
     await pumpSection(
       tester,
       service,
-      picker: () async => '/cache/picked/additional.json',
+      picker: () async => PickedFile(name: 'additional.json', bytes: Uint8List(4)),
       onDictionaryChanged: () => notifyCount++,
     );
 
@@ -332,7 +335,7 @@ void main() {
     await pumpSection(
       tester,
       service,
-      picker: () async => '/cache/broken.json',
+      picker: () async => PickedFile(name: 'broken.json', bytes: Uint8List(4)),
     );
 
     await tester.tap(find.byKey(const ValueKey('song-db-import-button')));

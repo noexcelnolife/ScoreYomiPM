@@ -102,7 +102,10 @@ class _FakeSongDatabaseService implements SongDatabaseService {
       const SongDbUpdateResult(status: SongDbUpdateStatus.skippedNoUrl);
 
   @override
-  Future<SongImportResult> importAdditionalJson(String sourceFilePath) async =>
+  Future<SongImportResult> importAdditionalJson(
+    Uint8List bytes, {
+    required String fileName,
+  }) async =>
       const SongImportResult(success: false);
 
   @override

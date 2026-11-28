@@ -1,6 +1,7 @@
 // FileSongDatabaseService の単体テスト（一時ディレクトリ＋MockClient で検証）。
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -230,7 +231,8 @@ void main() {
         );
 
         final SongImportResult result = await service.importAdditionalJson(
-          sourceFile.path,
+          sourceFile.readAsBytesSync(),
+          fileName: sourceFile.path.split(RegExp(r'[\\/]')).last,
         );
         expect(result.success, isTrue);
         expect(result.songCount, 1);
@@ -255,7 +257,8 @@ void main() {
         await sourceFile.writeAsString('not json at all');
 
         final SongImportResult result = await service.importAdditionalJson(
-          sourceFile.path,
+          sourceFile.readAsBytesSync(),
+          fileName: sourceFile.path.split(RegExp(r'[\\/]')).last,
         );
         expect(result.success, isFalse);
         expect(result.message, isNotNull);
@@ -270,7 +273,8 @@ void main() {
         MockClient((request) async => http.Response('', 200)),
       );
       final SongImportResult result = await service.importAdditionalJson(
-        '${tempDir.path}/missing.json',
+        Uint8List(0),
+        fileName: 'missing.json',
       );
       expect(result.success, isFalse);
       expect(result.message, isNotNull);

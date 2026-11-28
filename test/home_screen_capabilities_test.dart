@@ -13,6 +13,7 @@
 
 // WHY: この環境の Flutter では package:flutter/material.dart が非推奨で
 // material_ui が正規導入（既存テストの import 規約に合わせる）。
+import 'dart:typed_data';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -49,7 +50,10 @@ class _FakeSongDatabaseService implements SongDatabaseService {
       const SongDbUpdateResult(status: SongDbUpdateStatus.skippedNoUrl);
 
   @override
-  Future<SongImportResult> importAdditionalJson(String sourceFilePath) async =>
+  Future<SongImportResult> importAdditionalJson(
+    Uint8List bytes, {
+    required String fileName,
+  }) async =>
       const SongImportResult(success: false);
 
   @override

@@ -6,11 +6,12 @@
 /// 失敗は戻り値で表し、例外にしない（失敗が想定内の操作のため）。
 library;
 
+import 'dart:typed_data';
+
 import 'song_database_service.dart';
 
 /// 常に「未対応」を返すサービス。
-class UnsupportedSongDatabaseService implements SongDatabaseService {
-  const UnsupportedSongDatabaseService();
+class UnsupportedSongDatabaseService implements SongDatabaseService {  const UnsupportedSongDatabaseService();
 
   /// 未対応であることを示すメッセージ。
   static const String _message = 'この環境では曲データベースの更新に対応していません。';
@@ -50,7 +51,10 @@ class UnsupportedSongDatabaseService implements SongDatabaseService {
   }
 
   @override
-  Future<SongImportResult> importAdditionalJson(String sourceFilePath) async {
+  Future<SongImportResult> importAdditionalJson(
+    Uint8List bytes, {
+    required String fileName,
+  }) async {
     return const SongImportResult(success: false, message: _message);
   }
 }

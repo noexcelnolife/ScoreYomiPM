@@ -9,10 +9,22 @@
 // （ExpansionTile は maintainState=false）が子を破棄すると畳んだ時点で消えて
 // いたため、辞書の状態行と最終操作行として常設化した（リード裁定 2026-11-24）。
 // 失敗・スキップの SnackBar 通知だけは従来どおり残す。
+import 'dart:typed_data';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../songdb/song_database_service.dart';
+
+/// ファイル選択で得られたバイト列とファイル名。
+///
+/// WHY: Web（dart:html）では `XFile.path`（ローカルファイルパス文字列）が
+/// 開けないため、境界からパスを排除しバイト列＋名前で扱う（S1 設計 §2.1）。
+class PickedFile {
+  const PickedFile({required this.name, required this.bytes});
+  final String name;
+  final Uint8List bytes;
+}
 
 /// 収録曲辞書セクションの StatefulWidget。
 class SongDbSection extends StatefulWidget {
@@ -38,7 +50,8 @@ class SongDbSection extends StatefulWidget {
   ///
   /// WHY: デフォルト引数で注入可能にし、ウィジェットテストでは
   /// 実際のファイル選択ダイアログへ依存しないよう差し替える（DIP）。
-  final Future<String?> Function() pickAdditionalFile;
+  /// Web ではパス文字列が開けないため、バイト列＋名前を返す（S1）。
+  final Future<PickedFile?> Function() pickAdditionalFile;
 
   /// 内蔵シード辞書の曲数を返す（null は「不明」＝「—」表示）。
   final Future<int?> Function()? seedSongCount;
@@ -54,7 +67,10 @@ class SongDbSection extends StatefulWidget {
 }
 
 /// file_selector による既定の追加 DB ファイル選択。
-Future<String?> defaultPickAdditionalFile() async {
+///
+/// Web では `XFile.path` が開けないため、`readAsBytes()` でバイト列を読み
+/// 出し、`PickedFile`（バイト列＋名前）を返す（S1）。
+Future<PickedFile?> defaultPickAdditionalFile() async {
   const XTypeGroup jsonType = XTypeGroup(
     label: 'JSON',
     extensions: <String>['json'],
@@ -62,7 +78,9 @@ Future<String?> defaultPickAdditionalFile() async {
   final XFile? file = await openFile(
     acceptedTypeGroups: <XTypeGroup>[jsonType],
   );
-  return file?.path;
+  if (file == null) return null;
+  final Uint8List bytes = await file.readAsBytes();
+  return PickedFile(name: file.name, bytes: bytes);
 }
 
 class _SongDbSectionState extends State<SongDbSection> {
@@ -152,11 +170,11 @@ class _SongDbSectionState extends State<SongDbSection> {
 
   /// 追加 DB の JSON ファイルを選択して取り込む。
   Future<void> _importAdditional() async {
-    final String? sourceFilePath = await widget.pickAdditionalFile();
+    final PickedFile? picked = await widget.pickAdditionalFile();
     // WHY: ファイル選択のキャンセルは操作として無視（サイレント）。
-    if (sourceFilePath == null) return;
+    if (picked == null) return;
     final SongImportResult result = await widget.songDatabaseService
-        .importAdditionalJson(sourceFilePath);
+        .importAdditionalJson(picked.bytes, fileName: picked.name);
     if (!mounted) return;
     if (result.success) {
       widget.onDictionaryChanged?.call();

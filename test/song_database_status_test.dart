@@ -2,6 +2,7 @@
 // 最終操作の永続化（案B）のテスト（一時ディレクトリ＋MockClient）。
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -268,7 +269,10 @@ void main() {
         );
 
         final SongImportResult result = await createService(okClient())
-            .importAdditionalJson(sourceFile.path);
+            .importAdditionalJson(
+              sourceFile.readAsBytesSync(),
+              fileName: sourceFile.path.split(RegExp(r'[\\/]')).last,
+            );
         expect(result.success, isTrue);
 
         final SongDbLastOperation? op = (await createService(
@@ -311,7 +315,10 @@ void main() {
 
     test('importAdditionalJson 失敗も記録する', () async {
       final SongImportResult result = await createService(okClient())
-          .importAdditionalJson('${tempDir.path}/missing.json');
+          .importAdditionalJson(
+            Uint8List(0),
+            fileName: 'missing.json',
+          );
       expect(result.success, isFalse);
 
       final SongDbLastOperation? op = (await createService(
