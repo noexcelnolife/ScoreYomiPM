@@ -77,8 +77,12 @@ jobs:
       - name: Pages の設定を読む
         uses: actions/configure-pages@v5
         with:
-          # Pages サイトがまだ無いリポジトリでも、ワークフローの GITHUB_TOKEN で作成させる。
-          # 事前に人手で Settings → Pages を触らなくて済む。
+          # Pages サイトが未作成なら作らせる。作成済みなら設定を読むだけなので無害。
+          # ただしこのリポジトリでは新規作成が 403 で拒否された（2026-11-25 実測）。
+          #   GITHUB_TOKEN（pages: write 付き）→ Resource not accessible by integration
+          #   PAT（Pages 権限の追加前）        → Resource not accessible by personal access token
+          # サイトの新規作成だけは Settings → Pages の Source を GitHub Actions にする
+          # 人手の 1 クリックが要る（D-W20）。以後の配信は push だけで完結する。
           enablement: true
 
       - name: 成果物をアップロード
