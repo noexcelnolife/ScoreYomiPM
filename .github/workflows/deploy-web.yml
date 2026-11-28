@@ -78,11 +78,10 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           # Pages サイトが未作成なら作らせる。作成済みなら設定を読むだけなので無害。
-          # ただしこのリポジトリでは新規作成が 403 で拒否された（2026-11-25 実測）。
+          # このリポジトリでは新規作成が 403 で拒否されたため、2026-11-25 に
+          # Settings → Pages の Source を GitHub Actions にしてもらった（D-W20）。
           #   GITHUB_TOKEN（pages: write 付き）→ Resource not accessible by integration
-          #   PAT（Pages 権限の追加前）        → Resource not accessible by personal access token
-          # サイトの新規作成だけは Settings → Pages の Source を GitHub Actions にする
-          # 人手の 1 クリックが要る（D-W20）。以後の配信は push だけで完結する。
+          #   PAT                              → Resource not accessible by personal access token
           enablement: true
 
       - name: 成果物をアップロード
@@ -94,7 +93,16 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment:
-      name: github-pages
+      # 既定の `github-pages` を使わない。
+      # WHY: Settings から Pages を有効化すると、GitHub は `github-pages` 環境に
+      # 「main からの配布のみ許可」という保護ルールを自動で付ける（2026-11-25 実測:
+      # deployment-branch-policies は main の 1 件のみ）。その状態で feature/web から配布すると
+      #   Branch "feature/web" is not allowed to deploy to github-pages due to environment protection rules.
+      # でジョブが開始前に落ちる。許可ブランチの追加はリポジトリ管理者権限が要り、PAT では 403。
+      # 公式ドキュメントは「必要なら別の環境名でもよい（推奨はしない）」と明記しており、
+      # OIDC トークンの環境クレームはここで指定した名前で検証される。
+      # main へマージしない方針の間だけこの名前を使い、マージ後に `github-pages` へ戻す。
+      name: web-publish
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: 公開
