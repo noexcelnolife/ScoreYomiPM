@@ -39,8 +39,12 @@ List<SongEntry> _parseSongJson(String json) {
 /// `FileSongDatabaseService(blobStore:)` を注入し、`MergedSongRepository` は
 /// `BlobStoreSongRepositoryLoader` 経由で `IoBlobStore` から辞書を読む。
 ///
-/// 初期ロードは `createAppEnvironment` 内で `await reload()` する（ファイル
-/// I/O は高速なので初回描画をブロックしない）。
+/// 初期ロードは行わない（`reload()` は初期化後に別途呼び出す）。
+/// WHY: `BlobStore` 読み込みを起動時経路（`createAppEnvironment` → `main()`）で
+/// await すると初回描画をブロックするため。読み直しは `_runSongMatching` の
+/// run ごと、`song_title_live_search` の `_loadRepository()`、取り込み直後、
+/// バックアップ復元直後（S5）の 4 か所で行う。OCR は元々数秒かかる処理なので、
+/// IndexedDB/ファイルからの 1MB 読みコストはその中に隠れる。
 Future<AppEnvironment> createAppEnvironment() async {
   final blobStore = IoBlobStore(Directory('data'));
 
@@ -65,11 +69,6 @@ Future<AppEnvironment> createAppEnvironment() async {
     sources: const <SongRepository>[],
     loaders: <BlobStoreSongRepositoryLoader>[additionalLoader],
   );
-
-  // IO はファイル読み込みが高速なため、初期ロードをここで await する。
-  // 初回描画をブロックしない（読み込みは数 KB 程度）。
-  await mainSongRepository.reload();
-  await additionalSongRepository.reload();
 
   return AppEnvironment(
     blobStore: blobStore,

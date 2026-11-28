@@ -213,12 +213,23 @@ class LiveSongTitleSearch {
       final BundledSeedRepository seed = BundledSeedRepository();
       await seed.load();
       // 優先順は pipeline.dart と同じ（追加辞書 → 配布辞書 → シード）。
-      final List<SongRepository> sources = <SongRepository>[
-        ?additionalSongRepository,
-        ?mainSongRepository,
-        seed,
-      ];
-    return MergedSongRepository(sources: sources, loaders: const <BlobStoreSongRepositoryLoader>[]);
+      // S3: 注入された MergedSongRepository は reload() し、BlobStore から辞書を
+      // 読み直すことで、取り込み直後の新曲が次検索から反映される（spec §2.4）。
+      final List<SongRepository> sources = <SongRepository>[];
+      if (additionalSongRepository is MergedSongRepository) {
+        await (additionalSongRepository as MergedSongRepository).reload();
+      }
+      if (additionalSongRepository != null) {
+        sources.add(additionalSongRepository!);
+      }
+      if (mainSongRepository is MergedSongRepository) {
+        await (mainSongRepository as MergedSongRepository).reload();
+      }
+      if (mainSongRepository != null) {
+        sources.add(mainSongRepository!);
+      }
+      sources.add(seed);
+      return MergedSongRepository(sources: sources, loaders: const <BlobStoreSongRepositoryLoader>[]);
     } catch (_) {
       // WHY: 辞書が壊れていても入力・保存は続けられるようにする（劣化は
       // 「サジェストが出ない」だけに留める）。失敗はキャッシュせず、

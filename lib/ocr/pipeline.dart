@@ -486,15 +486,22 @@ class OcrPipeline {
       // WHY: bundledSeed は常に含める（オフライン時フォールバック、spec §10）。
       // isAvailable=false の注入ソース（DB 未ダウンロード・ファイル欠落等）は
       // MergedSongRepository 側で自動スキップされるため、パイプライン側の
-      // 分岐は不要。マージ済みリポジトリは毎 run 再構築するため、注入側で
-      // DB 更新後にリポジトリを張り替えれば次 run から反映される。
+      // 分岐は不要。S3: 注入された MergedSongRepository は run ごとに reload() し、
+      // BlobStore から辞書を読み直すことで、取り込み直後の新曲が次 run から反映される
+      //（spec §2.4）。
       final sources = <SongRepository>[];
       final additionalRepo = additionalSongRepository;
       if (additionalRepo != null) {
+        if (additionalRepo is MergedSongRepository) {
+          await additionalRepo.reload();
+        }
         sources.add(additionalRepo);
       }
       final mainRepo = mainSongRepository;
       if (mainRepo != null) {
+        if (mainRepo is MergedSongRepository) {
+          await mainRepo.reload();
+        }
         sources.add(mainRepo);
       }
       sources.add(seedRepo);
