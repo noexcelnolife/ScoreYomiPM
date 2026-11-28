@@ -24,7 +24,6 @@ import {
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildSync } from 'esbuild';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..');
@@ -85,12 +84,19 @@ function ensureDependencies() {
   runNpm([hasLock ? 'ci' : 'install', '--no-audit', '--no-fund']);
 }
 
-function bundle() {
+async function bundle() {
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(join(outDir, 'assets'), { recursive: true });
   writeFileSync(entryPath, "export * from '@paddleocr/paddleocr-js';\n", 'utf8');
   log('バンドル: esbuild 実行中...');
   try {
+    // esbuild は静的 import にしてはならない。
+    // WHY: ESM の静的 import は「モジュール本体のコードが 1 行も走る前」に解決される。
+    // 依存を入れる ensureDependencies() は main() の中で走るため、node_modules がまだ無い
+    // 状態（GitHub Actions の初回実行）では依存導入より解決が先に走って
+    // `ERR_MODULE_NOT_FOUND: Cannot find package 'esbuild'` で落ちる。
+    // 依存を入れ終わった後まで解決を遅らせるため、ここで動的 import する。
+    const { buildSync } = await import('esbuild');
     // CLI（node_modules/esbuild/bin/esbuild）を node で起動してはならない。
     // WHY: このパスは Windows では JS のシムだが、Linux/macOS ではプラットフォーム用の
     // 実行バイナリ本体（ELF / Mach-O）になる。node が JS として読もうとして
@@ -214,10 +220,10 @@ function report() {
   log('この合計は初回描画には含まれない（OCR 実行時に動的 import する）。');
 }
 
-function main() {
+async function main() {
   ensureDependencies();
   assertOrtVersionMatches();
-  bundle();
+  await bundle();
   copyWorkerAssets();
   copyWasm();
   copyLicenses();
@@ -234,4 +240,4 @@ function main() {
   log('完了。`flutter build web` の前に必ずこのスクリプトを実行すること。');
 }
 
-main();
+await main();
