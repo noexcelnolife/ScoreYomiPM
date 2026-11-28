@@ -10,6 +10,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import '../platform/blob_store.dart';
 import 'song_db_paths.dart';
 import 'song_database_status.dart';
 
@@ -110,27 +111,20 @@ class SongImportResult {
   final String? message;
 }
 
-/// ファイル・HTTP ベースの [SongDatabaseService] 実装。
+/// [SongDatabaseService] の実装（ファイルシステム・IndexedDB 共通）。
 ///
-/// 保存先契約（lib/ocr 側 stub リポジトリと一致）:
-/// - メイン DB: `<documents>/songs/main_v1.json`
-/// - 追加 DB: `<documents>/songs/additional_v1.json`
-/// - 設定: `<documents>/songs/settings.json`
+/// [blobStore] 経由で保存先にアクセスする。io プラットフォームでは
+/// `IoBlobStore`、Web では `IdbBlobStore` を渡す。サービス実装は 1 つに
+/// 統一し、`UnsupportedSongDatabaseService` は廃止された。
+///
+/// 保存先契約（キーは `/` 区切りの相対パス）:
+/// - メイン DB: `songs/main_v1.json`
+/// - 追加 DB: `songs/additional_v1.json`
+/// - 設定: `songs/settings.json`
+/// - 配信 URL: `songs/distribution_url.json`
 class FileSongDatabaseService implements SongDatabaseService {
-  static const String _settingsFileName = 'settings.json';
-  static const String _urlSettingsKey = 'distributionUrl';
-
-  /// 最終操作の記録キー。
-  static const String _lastOperationSettingsKey = 'lastOperation';
-
-  /// URL 未設定で更新をスキップしたときの記録メッセージ。
-  static const String _skippedNoUrlMessage = '配信 URL が未設定です';
-
-  /// documents ディレクトリの解決関数。
-  ///
-  /// WHY: 実行環境依存のため関数として注入し、テストでは一時ディレクトリへ
-  /// 差し替え可能にする（DIP）。
-  final Future<Directory> Function() _documentsDirectoryResolver;
+  /// [blobStore] は `IoBlobStore`（io）または `IdbBlobStore`（web）。
+  final BlobStore blobStore;
 
   /// HTTP クライアントの生成関数。
   ///
@@ -143,48 +137,59 @@ class FileSongDatabaseService implements SongDatabaseService {
   final DateTime Function() _clock;
 
   FileSongDatabaseService({
-    required this._documentsDirectoryResolver,
+    required this.blobStore,
     this._httpClientFactory = http.Client.new,
     this._clock = DateTime.now,
   });
 
   @override
   Future<String> loadDistributionUrl() async {
-    final Map<String, dynamic> settings = await _readSettings();
-    final Object? value = settings[_urlSettingsKey];
-    // WHY: 未設定・型不一致・壊れた設定ファイルはいずれも「未設定」（空文字）と
-    // して扱い、アプリの動作継続を優先する（既存規約を維持）。
-    return value is String ? value : '';
+    final bytes = await blobStore.read(SongDbPaths.settingsRelativePath);
+    if (bytes == null) return '';
+    final content = utf8.decode(bytes);
+    // WHY: 壊れた設定ファイルは空として扱う（次回保存で正常な形に直る）。
+    try {
+      final dynamic decoded = jsonDecode(content);
+      if (decoded is Map<String, dynamic>) {
+        final Object? value = decoded['distributionUrl'];
+        return value is String ? value : '';
+      }
+    } on FormatException catch (_) {
+      // 壊れた JSON は無視
+    }
+    return content;
   }
 
   @override
   Future<SongDatabaseStatus> loadStatus() async {
     // WHY: loadStatus はホーム画面の起動時に呼ばれる表示専用 API のため、
     // 設定が読めなくても画面を落とさず「未設定・記録なし」として返す。
-    // loadDistributionUrl（更新可否の判断に使う）は既存挙動を変えないため
-    // この耐性を共有しない。
     final Map<String, dynamic> settings = await _readSettingsForStatus();
-    final Object? url = settings[_urlSettingsKey];
+    final Object? url = settings['distributionUrl'];
     return SongDatabaseStatus(
       distributionUrl: url is String ? url : '',
-      main: await _readSourceStatus(await _mainDbFile(), withDbVersion: true),
+      main: await _readSourceStatus(SongDbPaths.mainDbRelativePath, withDbVersion: true),
       additional: await _readSourceStatus(
-        await _additionalDbFile(),
+        SongDbPaths.additionalDbRelativePath,
         withDbVersion: false,
       ),
-      lastOperation: SongDbLastOperation.tryParse(
-        settings[_lastOperationSettingsKey],
-      ),
+      lastOperation: SongDbLastOperation.tryParse(settings['lastOperation']),
     );
   }
 
   @override
   Future<void> saveDistributionUrl(String url) async {
-    final Map<String, dynamic> settings = await _readSettings();
-    settings[_urlSettingsKey] = url;
     // WHY: 最終操作の記録（lastOperation）など既存キーを消さないため、
     // 丸ごと上書きではなく読み込み→マージ→書き込みで保存する。
-    await _writeSettings(settings);
+    final bytes = await blobStore.read(SongDbPaths.settingsRelativePath);
+    final Map<String, dynamic> settings = bytes != null
+        ? (jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>)
+        : <String, dynamic>{};
+    settings['distributionUrl'] = url;
+    await blobStore.write(
+      SongDbPaths.settingsRelativePath,
+      utf8.encode(jsonEncode(settings)),
+    );
   }
 
   @override
@@ -248,9 +253,9 @@ class FileSongDatabaseService implements SongDatabaseService {
       final Map<String, dynamic> envelope = await _fetchEnvelope(url);
       final int serverDbVersion = _readDbVersion(envelope);
       final int remoteSongCount = (envelope['songs'] as List<dynamic>).length;
-      final File mainFile = await _mainDbFile();
-      if (await mainFile.exists()) {
-        final int localDbVersion = await _readLocalDbVersion(mainFile);
+      final existing = await blobStore.read(SongDbPaths.mainDbRelativePath);
+      if (existing != null) {
+        final int localDbVersion = await _readLocalDbVersion(existing);
         if (localDbVersion >= serverDbVersion) {
           return _UpdateOutcome(
             result: SongDbUpdateResult(
@@ -264,7 +269,7 @@ class FileSongDatabaseService implements SongDatabaseService {
       }
       // WHY: ローカル DB が無い場合は dbVersion の値に関係なく常時保存する
       // （初回起動時ダウンロードフロー・設計確定事項）。
-      final int songCount = await _saveMainDb(mainFile, envelope);
+      final int songCount = await _saveMainDb(envelope);
       return _UpdateOutcome(
         result: SongDbUpdateResult(
           status: SongDbUpdateStatus.applied,
@@ -323,9 +328,20 @@ class FileSongDatabaseService implements SongDatabaseService {
           message: '"songs" 配列を含む JSON ファイルを選択してください。',
         );
       }
-      final File targetFile = await _additionalDbFile();
-      await targetFile.parent.create(recursive: true);
-      await targetFile.writeAsString(jsonEncode(decoded), flush: true);
+
+      // WHY: 拡張子の検証だけ残す（パス文字列ではなく fileName のみを使用）。
+      final String name = fileName.toLowerCase();
+      if (!name.endsWith('.json')) {
+        return const SongImportResult(
+          success: false,
+          message: 'JSON ファイル（.json）を選択してください。',
+        );
+      }
+
+      await blobStore.write(
+        SongDbPaths.additionalDbRelativePath,
+        utf8.encode(jsonEncode(decoded)),
+      );
       final List<dynamic> songs = decoded['songs'] as List<dynamic>;
       return SongImportResult(success: true, songCount: songs.length);
     } on FormatException catch (_) {
@@ -335,8 +351,12 @@ class FileSongDatabaseService implements SongDatabaseService {
         success: false,
         message: 'JSON として解釈できませんでした。',
       );
-    } on FileSystemException catch (_) {
-      // WHY: 書き込み先ディレクトリの権限・ロック等で保存できない場合。
+    } on BlobStoreQuotaException catch (_) {
+      return const SongImportResult(
+        success: false,
+        message: '保存領域の空き容量が足りません。',
+      );
+    } on Exception catch (_) {
       return const SongImportResult(
         success: false,
         message: 'ファイルを保存できませんでした。',
@@ -375,7 +395,7 @@ class FileSongDatabaseService implements SongDatabaseService {
   /// 記録に残す理由文言。成功時は null（成功は dbVersion で表す）。
   String? _operationMessage(SongDbUpdateStatus status, String? message) {
     if (status == SongDbUpdateStatus.skippedNoUrl) {
-      return _skippedNoUrlMessage;
+      return '配信 URL が未設定です';
     }
     if (status == SongDbUpdateStatus.failed) {
       return message;
@@ -386,10 +406,16 @@ class FileSongDatabaseService implements SongDatabaseService {
   /// 最終操作を settings.json へ保存する（既存キーは保持）。
   Future<void> _recordLastOperation(SongDbLastOperation operation) async {
     try {
-      final Map<String, dynamic> settings = await _readSettings();
-      settings[_lastOperationSettingsKey] = operation.toJson();
-      await _writeSettings(settings);
-    } on FileSystemException catch (_) {
+      final bytes = await blobStore.read(SongDbPaths.settingsRelativePath);
+      final Map<String, dynamic> settings = bytes != null
+          ? (jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>)
+          : <String, dynamic>{};
+      settings['lastOperation'] = operation.toJson();
+      await blobStore.write(
+        SongDbPaths.settingsRelativePath,
+        utf8.encode(jsonEncode(settings)),
+      );
+    } on Exception catch (_) {
       // WHY: 記録は補助情報であり、ここで例外を投げると辞書更新の成否が
       // 反転して UI の結果表示が事実と食い違う。失敗時は記録を諦めて続行する。
     }
@@ -397,12 +423,12 @@ class FileSongDatabaseService implements SongDatabaseService {
 
   /// settings.json をキーを保持したまま読む（無い・壊れている場合は空）。
   Future<Map<String, dynamic>> _readSettings() async {
-    final File settingsFile = await _settingsFile();
-    if (!await settingsFile.exists()) {
+    final bytes = await blobStore.read(SongDbPaths.settingsRelativePath);
+    if (bytes == null) {
       return <String, dynamic>{};
     }
     try {
-      final dynamic decoded = jsonDecode(await settingsFile.readAsString());
+      final dynamic decoded = jsonDecode(utf8.decode(bytes));
       if (decoded is Map<String, dynamic>) {
         return decoded;
       }
@@ -412,48 +438,35 @@ class FileSongDatabaseService implements SongDatabaseService {
     return <String, dynamic>{};
   }
 
-  /// settings.json を書き出す（親ディレクトリが無ければ作る）。
-  Future<void> _writeSettings(Map<String, dynamic> settings) async {
-    final File settingsFile = await _settingsFile();
-    await settingsFile.parent.create(recursive: true);
-    await settingsFile.writeAsString(jsonEncode(settings), flush: true);
-  }
-
   /// loadStatus 用の設定読み込み（IO 例外も「読めなかった」として扱う）。
   Future<Map<String, dynamic>> _readSettingsForStatus() async {
     try {
       return await _readSettings();
-    } on FileSystemException catch (_) {
+    } on Exception catch (_) {
       // WHY: 権限・ロック等で読めない場合も、表示専用の照会では
       // 「未設定・記録なし」として返して画面を落とさない。
       return <String, dynamic>{};
     }
   }
 
-  /// 辞書ファイル 1 つの状態を読む。
+  /// 辞書ファイル 1 つの状態を読む（BlobStore 経由）。
   ///
   /// WHY: 壊れた JSON や IO エラーで例外を投げるとステータス画面が落ちるため、
   /// 「ファイルが存在する」ことだけは保ち、件数・バージョンは不明（null）にする。
   Future<SongDbSourceStatus> _readSourceStatus(
-    File file, {
+    String key, {
     required bool withDbVersion,
   }) async {
     try {
-      if (!await file.exists()) {
+      final bytes = await blobStore.read(key);
+      if (bytes == null) {
         return const SongDbSourceStatus(exists: false);
       }
-    } on FileSystemException catch (_) {
-      // WHY: 存在確認すら失敗した場合は有無を判定できないため「無い」に倒す。
-      return const SongDbSourceStatus(exists: false);
-    }
-    try {
-      final DateTime updatedAt = (await file.stat()).modified;
       return _parseSourceStatus(
-        await file.readAsString(),
-        updatedAt: updatedAt,
+        utf8.decode(bytes),
         withDbVersion: withDbVersion,
       );
-    } on FileSystemException catch (_) {
+    } on Exception catch (_) {
       // WHY: 存在は分かっているが権限・ロック等で読めない場合。exists=false に
       // すると「未取得」と誤表示されるため、件数不明のまま存在を保つ。
       return const SongDbSourceStatus(exists: true);
@@ -463,13 +476,12 @@ class FileSongDatabaseService implements SongDatabaseService {
   /// 辞書ファイルの内容を状態へ解釈する（壊れた JSON は件数不明）。
   SongDbSourceStatus _parseSourceStatus(
     String content, {
-    required DateTime updatedAt,
     required bool withDbVersion,
   }) {
     try {
       final dynamic decoded = jsonDecode(content);
       if (decoded is! Map<String, dynamic>) {
-        return SongDbSourceStatus(exists: true, updatedAt: updatedAt);
+        return const SongDbSourceStatus(exists: true);
       }
       final Object? songs = decoded['songs'];
       return SongDbSourceStatus(
@@ -477,10 +489,9 @@ class FileSongDatabaseService implements SongDatabaseService {
         songCount: songs is List ? songs.length : null,
         // WHY: dbVersion はメイン DB のエンベロープにのみ意味がある。
         dbVersion: withDbVersion ? _readIntOrNull(decoded['dbVersion']) : null,
-        updatedAt: updatedAt,
       );
     } on FormatException catch (_) {
-      return SongDbSourceStatus(exists: true, updatedAt: updatedAt);
+      return const SongDbSourceStatus(exists: true);
     }
   }
 
@@ -520,11 +531,11 @@ class FileSongDatabaseService implements SongDatabaseService {
     throw const FormatException('dbVersion が不正です');
   }
 
-  /// ローカル main DB ファイルから dbVersion を読む。破損時は 0 扱い、
+  /// メイン DB バイト列から dbVersion を読む。破損時は 0 扱い、
   /// 次回取得で上書きされる。
-  Future<int> _readLocalDbVersion(File mainFile) async {
+  Future<int> _readLocalDbVersion(Uint8List mainBytes) async {
     try {
-      final dynamic decoded = jsonDecode(await mainFile.readAsString());
+      final dynamic decoded = jsonDecode(utf8.decode(mainBytes));
       if (decoded is Map) {
         return _readIntOrNull(decoded['dbVersion']) ?? 0;
       }
@@ -545,27 +556,14 @@ class FileSongDatabaseService implements SongDatabaseService {
     return null;
   }
 
-  /// メイン DB ファイルへエンベロープを保存し、収録曲数を返す。
-  Future<int> _saveMainDb(File mainFile, Map<String, dynamic> envelope) async {
-    await mainFile.parent.create(recursive: true);
-    await mainFile.writeAsString(jsonEncode(envelope), flush: true);
+  /// メイン DB へエンベロープを保存し、収録曲数を返す。
+  Future<int> _saveMainDb(Map<String, dynamic> envelope) async {
+    await blobStore.write(
+      SongDbPaths.mainDbRelativePath,
+      utf8.encode(jsonEncode(envelope)),
+    );
     return (envelope['songs'] as List<dynamic>).length;
   }
-
-  Future<Directory> _songsDirectory() async {
-    final Directory documents = await _documentsDirectoryResolver();
-    return Directory('${documents.path}/${SongDbPaths.songsDirName}');
-  }
-
-  Future<File> _mainDbFile() async =>
-      File('${(await _songsDirectory()).path}/${SongDbPaths.mainDbFileName}');
-
-  Future<File> _additionalDbFile() async => File(
-    '${(await _songsDirectory()).path}/${SongDbPaths.additionalDbFileName}',
-  );
-
-  Future<File> _settingsFile() async =>
-      File('${(await _songsDirectory()).path}/$_settingsFileName');
 }
 
 /// 更新処理の結果と、記録に残すサーバー側収録曲数の組。

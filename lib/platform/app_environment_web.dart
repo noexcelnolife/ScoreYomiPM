@@ -3,7 +3,7 @@ library;
 
 import 'package:idb_shim/idb_browser.dart' show idbFactoryBrowser;
 
-import '../songdb/unsupported_song_database_service.dart';
+import '../songdb/song_database_service.dart';
 import 'app_environment.dart';
 import 'blob_store.dart';
 import 'idb_blob_store.dart';
@@ -32,8 +32,10 @@ Future<AppEnvironment> createAppEnvironment() async {
   return AppEnvironment(
     capabilities: const WebCapabilities(),
     blobStore: blobStore,
-    // WHY(非対応サービスを渡すか): UI 側は canUpdateSongDatabase で入口を
-    // 隠すが、隠し漏れがあっても落ちないよう、呼ばれても失敗を返す実装にする。
-    songDatabaseService: const UnsupportedSongDatabaseService(),
+    // WHY(Web でもファイルサービス実装を使うか): サービス実装は 1 つに統一し、
+    // io/Web で同一の [FileSongDatabaseService] を使う。Web では
+    // canUpdateSongDatabase で入口を隠し、辞書更新の入口を出さないため、
+    // 呼び出し側で `onUpdateSongDatabase` 側で制御する（隠し漏れ防止）。
+    songDatabaseService: FileSongDatabaseService(blobStore: blobStore),
   );
 }

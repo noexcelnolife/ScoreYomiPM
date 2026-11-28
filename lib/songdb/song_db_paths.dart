@@ -21,4 +21,7 @@ class SongDbPaths {
   /// ローカル追加 DB（取り込みの保存先）の相対パス。
   static const String additionalDbRelativePath =
       '$songsDirName/$additionalDbFileName';
+
+  /// 設定ファイル（lastOperation など）の相対パス。
+  static const String settingsRelativePath = '$songsDirName/settings.json';
 }

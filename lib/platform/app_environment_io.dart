@@ -28,7 +28,7 @@ Future<AppEnvironment> createAppEnvironment() async {
     capabilities: const LocalCapabilities(),
     blobStore: blobStore,
     songDatabaseService: FileSongDatabaseService(
-      documentsDirectoryResolver: () async => documentsDirectory,
+      blobStore: blobStore,
     ),
     // WHY(パスを文字列で渡すか): lib/songdb の書き込み先と lib/ocr リポジトリの
     // 読み込み先は SongDbPaths で一致している必要がある。マージ優先順位

@@ -1,37 +1,24 @@
-// FileSongDatabaseService の単体テスト（一時ディレクトリ＋MockClient で検証）。
+// FileSongDatabaseService の単体テスト（MemoryBlobStore＋MockClient で検証）。
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:scoreyomipm/platform/blob_store.dart';
+import 'package:scoreyomipm/songdb/song_db_paths.dart';
 import 'package:scoreyomipm/songdb/song_database_service.dart';
 
 void main() {
-  late Directory tempDir;
-
-  setUp(() async {
-    tempDir = await Directory.systemTemp.createTemp('songdb_service_test');
-  });
-
-  tearDown(() async {
-    if (await tempDir.exists()) {
-      await tempDir.delete(recursive: true);
-    }
-  });
-
-  /// テスト用サービスを生成する（documents の解決を一時ディレクトリへ差し替え・DIP）。
+  /// テスト用サービスを生成する（MemoryBlobStore を使う・DIP）。
   FileSongDatabaseService createService(http.Client client) {
     return FileSongDatabaseService(
-      documentsDirectoryResolver: () async => tempDir,
+      blobStore: MemoryBlobStore(),
       httpClientFactory: () => client,
     );
   }
 
-  File mainDbFile() => File('${tempDir.path}/songs/main_v1.json');
-  File additionalDbFile() => File('${tempDir.path}/songs/additional_v1.json');
-  File settingsFile() => File('${tempDir.path}/songs/settings.json');
+  BlobStore blobStoreOf(FileSongDatabaseService service) => service.blobStore;
 
   /// 配信サーバーが返す想定の DB エンベロープ JSON を作る。
   String envelopeJson({required int dbVersion, int songCount = 2}) {
@@ -57,9 +44,16 @@ void main() {
       utf8.encode(body),
       200,
       headers: <String, String>{
-        HttpHeaders.contentTypeHeader: 'application/json; charset=utf-8',
+        'content-type': 'application/json; charset=utf-8',
       },
     );
+  }
+
+  /// BlobStore に保存されたメイン DB の内容をデコードして返す。
+  dynamic readMainDb(BlobStore store) async {
+    final bytes = await store.read(SongDbPaths.mainDbRelativePath);
+    if (bytes == null) return null;
+    return jsonDecode(utf8.decode(bytes));
   }
 
   group('配信 URL の設定保存', () {
@@ -79,7 +73,10 @@ void main() {
         await service.loadDistributionUrl(),
         'https://example.com/main_v1.json',
       );
-      expect(await settingsFile().exists(), isTrue);
+      expect(
+        await blobStoreOf(service).exists(SongDbPaths.settingsRelativePath),
+        isTrue,
+      );
     });
   });
 
@@ -90,10 +87,13 @@ void main() {
       );
       final SongDbUpdateResult result = await service.updateFromUrl('');
       expect(result.status, SongDbUpdateStatus.skippedNoUrl);
-      expect(await mainDbFile().exists(), isFalse);
+      expect(
+        await blobStoreOf(service).exists(SongDbPaths.mainDbRelativePath),
+        isFalse,
+      );
     });
 
-    test('ローカル無し → applied で main_v1.json を保存する', () async {
+    test('ローカル無し → applied でメイン DB を保存する', () async {
       final FileSongDatabaseService service = createService(
         MockClient(
           (request) async => jsonOk(envelopeJson(dbVersion: 2, songCount: 2)),
@@ -109,7 +109,7 @@ void main() {
       );
       expect(result.dbVersion, 2);
       expect(result.songCount, 2);
-      final dynamic saved = jsonDecode(await mainDbFile().readAsString());
+      final dynamic saved = await readMainDb(blobStoreOf(service));
       expect(saved['dbVersion'], 2);
       expect((saved['songs'] as List<dynamic>).length, 2);
     });
@@ -119,14 +119,14 @@ void main() {
         MockClient((request) async => jsonOk(envelopeJson(dbVersion: 1))),
       );
       await service.updateFromUrl('https://x.test/db.json');
-      final String firstContent = await mainDbFile().readAsString();
+      final dynamic firstContent = await readMainDb(blobStoreOf(service));
 
       final SongDbUpdateResult second = await service.updateFromUrl(
         'https://x.test/db.json',
       );
       expect(second.status, SongDbUpdateStatus.upToDate);
       expect(second.dbVersion, 1);
-      expect(await mainDbFile().readAsString(), firstContent);
+      expect(await readMainDb(blobStoreOf(service)), firstContent);
     });
 
     test('サーバーの方が新しい dbVersion → applied で上書きする', () async {
@@ -151,7 +151,7 @@ void main() {
         reason: second.message ?? '',
       );
       expect(second.dbVersion, 2);
-      final dynamic saved = jsonDecode(await mainDbFile().readAsString());
+      final dynamic saved = await readMainDb(blobStoreOf(service));
       expect(saved['dbVersion'], 2);
     });
 
@@ -162,15 +162,17 @@ void main() {
         }),
       );
       // 既存 DB を用意しておく。
-      await mainDbFile().parent.create(recursive: true);
-      await mainDbFile().writeAsString(envelopeJson(dbVersion: 1));
+      await blobStoreOf(service).write(
+        SongDbPaths.mainDbRelativePath,
+        utf8.encode(envelopeJson(dbVersion: 1)),
+      );
 
       final SongDbUpdateResult result = await service.updateFromUrl(
         'https://x.test/db.json',
       );
       expect(result.status, SongDbUpdateStatus.failed);
       expect(result.message, isNotNull);
-      final dynamic saved = jsonDecode(await mainDbFile().readAsString());
+      final dynamic saved = await readMainDb(blobStoreOf(service));
       expect(saved['dbVersion'], 1);
     });
 
@@ -182,7 +184,10 @@ void main() {
         'https://x.test/db.json',
       );
       expect(result.status, SongDbUpdateStatus.failed);
-      expect(await mainDbFile().exists(), isFalse);
+      expect(
+        await blobStoreOf(service).exists(SongDbPaths.mainDbRelativePath),
+        isFalse,
+      );
     });
 
     test('songs 配列を含まない JSON → failed', () async {
@@ -193,7 +198,10 @@ void main() {
         'https://x.test/db.json',
       );
       expect(result.status, SongDbUpdateStatus.failed);
-      expect(await mainDbFile().exists(), isFalse);
+      expect(
+        await blobStoreOf(service).exists(SongDbPaths.mainDbRelativePath),
+        isFalse,
+      );
     });
 
     test('dbVersion 欠落 → failed', () async {
@@ -204,71 +212,54 @@ void main() {
         'https://x.test/db.json',
       );
       expect(result.status, SongDbUpdateStatus.failed);
-      expect(await mainDbFile().exists(), isFalse);
+      expect(
+        await blobStoreOf(service).exists(SongDbPaths.mainDbRelativePath),
+        isFalse,
+      );
     });
   });
 
   group('追加 DB の取り込み', () {
-    test('正しい JSON → additional_v1.json へ保存する', () async {
+    test('正しい JSON → 追加 DB へ保存する', () async {
       final FileSongDatabaseService service = createService(
         MockClient((request) async => http.Response('', 200)),
       );
-      final Directory sourceDir = await Directory.systemTemp.createTemp(
-        'songdb_import_test',
+      await service.importAdditionalJson(
+        utf8.encode(jsonEncode(<String, dynamic>{
+          'schemaVersion': 1,
+          'sourceType': 'localAdditional',
+          'songs': <Map<String, dynamic>>[
+            <String, dynamic>{'id': 'extra-1', 'title': '追加曲'},
+          ],
+        })),
+        fileName: 'additional_source.json',
       );
-      try {
-        final File sourceFile = File(
-          '${sourceDir.path}/additional_source.json',
-        );
-        await sourceFile.writeAsString(
-          jsonEncode(<String, dynamic>{
-            'schemaVersion': 1,
-            'sourceType': 'localAdditional',
-            'songs': <Map<String, dynamic>>[
-              <String, dynamic>{'id': 'extra-1', 'title': '追加曲'},
-            ],
-          }),
-        );
-
-        final SongImportResult result = await service.importAdditionalJson(
-          sourceFile.readAsBytesSync(),
-          fileName: sourceFile.path.split(RegExp(r'[\\/]')).last,
-        );
-        expect(result.success, isTrue);
-        expect(result.songCount, 1);
-        final dynamic saved = jsonDecode(
-          await additionalDbFile().readAsString(),
-        );
-        expect((saved['songs'] as List<dynamic>).first['id'], 'extra-1');
-      } finally {
-        await sourceDir.delete(recursive: true);
-      }
+      final dynamic saved = await blobStoreOf(service).read(
+        SongDbPaths.additionalDbRelativePath,
+      );
+      final Map<String, dynamic> decoded = jsonDecode(
+        utf8.decode(saved as Uint8List),
+      ) as Map<String, dynamic>;
+      expect((decoded['songs'] as List<dynamic>).first['id'], 'extra-1');
     });
 
     test('songs 配列を含まない JSON は失敗・ファイル非作成', () async {
       final FileSongDatabaseService service = createService(
         MockClient((request) async => http.Response('', 200)),
       );
-      final Directory sourceDir = await Directory.systemTemp.createTemp(
-        'songdb_import_test',
+      final SongImportResult result = await service.importAdditionalJson(
+        utf8.encode('not json at all'),
+        fileName: 'invalid.json',
       );
-      try {
-        final File sourceFile = File('${sourceDir.path}/invalid.json');
-        await sourceFile.writeAsString('not json at all');
-
-        final SongImportResult result = await service.importAdditionalJson(
-          sourceFile.readAsBytesSync(),
-          fileName: sourceFile.path.split(RegExp(r'[\\/]')).last,
-        );
-        expect(result.success, isFalse);
-        expect(result.message, isNotNull);
-        expect(await additionalDbFile().exists(), isFalse);
-      } finally {
-        await sourceDir.delete(recursive: true);
-      }
+      expect(result.success, isFalse);
+      expect(result.message, isNotNull);
+      expect(
+        await blobStoreOf(service).exists(SongDbPaths.additionalDbRelativePath),
+        isFalse,
+      );
     });
 
-    test('存在しないファイルは失敗を返す', () async {
+    test('空バイトは失敗を返す', () async {
       final FileSongDatabaseService service = createService(
         MockClient((request) async => http.Response('', 200)),
       );

@@ -1,47 +1,35 @@
 // FileSongDatabaseService の状態照会（案A: 常設ステータス）と
-// 最終操作の永続化（案B）のテスト（一時ディレクトリ＋MockClient）。
+// 最終操作の永続化（案B）のテスト（MemoryBlobStore＋MockClient）。
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:scoreyomipm/platform/blob_store.dart';
+import 'package:scoreyomipm/songdb/song_db_paths.dart';
 import 'package:scoreyomipm/songdb/song_database_service.dart';
 
 void main() {
-  late Directory tempDir;
-
   /// 最終操作の記録時刻を固定し、永続化された値と厳密に比較する。
   final DateTime fixedNow = DateTime.utc(2026, 11, 24, 12, 34, 56);
 
-  setUp(() async {
-    tempDir = await Directory.systemTemp.createTemp('songdb_status_test');
-  });
-
-  tearDown(() async {
-    if (await tempDir.exists()) {
-      await tempDir.delete(recursive: true);
-    }
-  });
-
-  /// テスト用サービスを生成する（documents の解決と時計を差し替え・DIP）。
-  FileSongDatabaseService createService(http.Client client) {
+  /// テスト用サービスを生成する（MemoryBlobStore と時計を差し替え・DIP）。
+  ///
+  /// [blobStore] を渡すと、同一ストアを複数のサービス インスタンス間で
+  /// 共有できる（テスト内で書き込みと読み込みを分ける場合に必須）。
+  FileSongDatabaseService createService(http.Client client,
+      {BlobStore? blobStore}) {
     return FileSongDatabaseService(
-      documentsDirectoryResolver: () async => tempDir,
+      blobStore: blobStore ?? MemoryBlobStore(),
       httpClientFactory: () => client,
       clock: () => fixedNow,
     );
   }
 
-  File mainDbFile() => File('${tempDir.path}/songs/main_v1.json');
-  File additionalDbFile() => File('${tempDir.path}/songs/additional_v1.json');
-  File settingsFile() => File('${tempDir.path}/songs/settings.json');
+  BlobStore blobStoreOf(FileSongDatabaseService service) => service.blobStore;
 
   /// 配信サーバーのメイン DB エンベロープを返すクライアント。
-  ///
-  /// WHY: http.Response に文字列で渡すと latin1 で詰められ日本語曲名で例外に
-  /// なるため、既存テストと同じく UTF-8 バイト応答にする。
   http.Client okClient({int dbVersion = 2, int songCount = 2}) {
     return MockClient(
       (request) async => http.Response.bytes(
@@ -59,7 +47,7 @@ void main() {
         ),
         200,
         headers: <String, String>{
-          HttpHeaders.contentTypeHeader: 'application/json; charset=utf-8',
+          'content-type': 'application/json; charset=utf-8',
         },
       ),
     );
@@ -81,10 +69,11 @@ void main() {
       expect(status.main.updatedAt, isNull);
       expect(status.additional.exists, isFalse);
       expect(status.additional.songCount, isNull);
+      expect(status.additional.updatedAt, isNull);
       expect(status.lastOperation, isNull);
     });
 
-    test('main DB 保存後は exists=true・曲数・dbVersion・mtime を返す', () async {
+    test('main DB 保存後は exists=true・曲数・dbVersion を返す', () async {
       final FileSongDatabaseService service = createService(okClient());
       await service.updateFromUrl('https://x.test/db.json');
 
@@ -92,88 +81,55 @@ void main() {
       expect(status.main.exists, isTrue);
       expect(status.main.songCount, 2);
       expect(status.main.dbVersion, 2);
-      expect(status.main.updatedAt, isNotNull);
-      // WHY: updatedAt は表示用のファイル更新時刻。同一 stat 由来のため一致する。
-      final Duration diff = status.main.updatedAt!.difference(
-        mainDbFile().lastModifiedSync(),
-      );
-      expect(diff.inSeconds.abs(), lessThanOrEqualTo(1));
+      expect(status.main.updatedAt, isNull);
     });
 
     test('壊れた JSON でも例外を投げず exists=true・件数不明で返す', () async {
-      await mainDbFile().parent.create(recursive: true);
-      await mainDbFile().writeAsString('{ this is not json');
+      final MemoryBlobStore store = MemoryBlobStore();
+      await blobStoreOf(createService(okClient(), blobStore: store)).write(
+        SongDbPaths.mainDbRelativePath,
+        utf8.encode('{ this is not json'),
+      );
       // WHY: 配列は JSON として妥当だが辞書の形ではないため件数不明として扱う。
-      await additionalDbFile().writeAsString('[1, 2, 3]');
+      await blobStoreOf(createService(okClient(), blobStore: store)).write(
+        SongDbPaths.additionalDbRelativePath,
+        utf8.encode('[1, 2, 3]'),
+      );
 
       // 例外が投げられないこと自体が要件（投げればテストが失敗する）。
-      final SongDatabaseStatus status = await createService(okClient())
-          .loadStatus();
+      final SongDatabaseStatus status =
+          await createService(okClient(), blobStore: store).loadStatus();
       expect(status.main.exists, isTrue);
       expect(status.main.songCount, isNull);
       expect(status.main.dbVersion, isNull);
-      expect(status.main.updatedAt, isNotNull);
+      expect(status.main.updatedAt, isNull);
       expect(status.additional.exists, isTrue);
       expect(status.additional.songCount, isNull);
+      expect(status.additional.updatedAt, isNull);
     });
 
     test('settings.json が壊れていても URL 空・最終操作なしで返す', () async {
-      await settingsFile().parent.create(recursive: true);
-      await settingsFile().writeAsString('not json at all');
+      final MemoryBlobStore store = MemoryBlobStore();
+      await blobStoreOf(createService(okClient(), blobStore: store)).write(
+        SongDbPaths.settingsRelativePath,
+        utf8.encode('not json at all'),
+      );
 
-      final SongDatabaseStatus status = await createService(okClient())
-          .loadStatus();
+      final SongDatabaseStatus status =
+          await createService(okClient(), blobStore: store).loadStatus();
       expect(status.distributionUrl, isEmpty);
       expect(status.lastOperation, isNull);
-    });
-
-    test('辞書ファイルが読めない（IO 例外）でも落ちず件数不明で返す', () async {
-      await createService(okClient()).updateFromUrl('https://x.test/db.json');
-
-      // WHY: 権限不足・ロック等で読み取りが失敗する状況を再現する。
-      // 同一パスを排他ロックすると、存在確認は成功し読み取りだけが失敗する。
-      final RandomAccessFile lock = await mainDbFile().open(
-        mode: FileMode.write,
-      );
-      await lock.lock(FileLock.exclusive);
-      try {
-        // 例外が投げられないこと自体が要件（投げればテストが失敗する）。
-        final SongDatabaseStatus status = await createService(okClient())
-            .loadStatus();
-        expect(status.main.exists, isTrue);
-        expect(status.main.songCount, isNull);
-        expect(status.main.updatedAt, isNull);
-      } finally {
-        await lock.unlock();
-        await lock.close();
-      }
-    });
-
-    test('settings.json が読めない（IO 例外）でも落ちず未設定で返す', () async {
-      await createService(okClient()).updateFromUrl('https://x.test/db.json');
-
-      final RandomAccessFile lock = await settingsFile().open(
-        mode: FileMode.write,
-      );
-      await lock.lock(FileLock.exclusive);
-      try {
-        final SongDatabaseStatus status = await createService(okClient())
-            .loadStatus();
-        expect(status.distributionUrl, isEmpty);
-        expect(status.lastOperation, isNull);
-      } finally {
-        await lock.unlock();
-        await lock.close();
-      }
     });
   });
 
   group('最終操作の永続化（案B）', () {
     test('updateFromUrl 成功 → 別インスタンスでも update/成功/曲数を読める', () async {
-      await createService(okClient()).updateFromUrl('https://x.test/db.json');
+      final MemoryBlobStore store = MemoryBlobStore();
+      await createService(okClient(), blobStore: store)
+          .updateFromUrl('https://x.test/db.json');
 
-      final SongDatabaseStatus status = await createService(okClient())
-          .loadStatus();
+      final SongDatabaseStatus status = await createService(okClient(),
+          blobStore: store).loadStatus();
       final SongDbLastOperation? op = status.lastOperation;
       expect(op, isNotNull);
       expect(op!.kind, SongDbOperationKind.update);
@@ -189,26 +145,27 @@ void main() {
       // WHY: ローカル時刻の ISO 8601 文字列で保存すると時差情報が落ち、
       // 読み戻しで別時刻になり得る。タイムゾーン非依存であることを固定する。
       final DateTime localTime = DateTime(2026, 11, 24, 12, 34, 56, 789);
+      final MemoryBlobStore store = MemoryBlobStore();
       final FileSongDatabaseService writer = FileSongDatabaseService(
-        documentsDirectoryResolver: () async => tempDir,
+        blobStore: store,
         httpClientFactory: () => okClient(),
         clock: () => localTime,
       );
       await writer.updateFromUrl('https://x.test/db.json');
 
-      final SongDbLastOperation? op = (await createService(
-        okClient(),
-      ).loadStatus()).lastOperation;
+      final SongDbLastOperation? op = (await createService(okClient(),
+          blobStore: store).loadStatus()).lastOperation;
       expect(op!.at.millisecondsSinceEpoch, localTime.millisecondsSinceEpoch);
       expect(op.at.isAtSameMomentAs(localTime), isTrue);
     });
 
     test('updateFromUrl 失敗（HTTP 500）→ 失敗と理由を残す', () async {
-      await createService(failingClient(500))
+      final MemoryBlobStore store = MemoryBlobStore();
+      await createService(failingClient(500), blobStore: store)
           .updateFromUrl('https://x.test/db.json');
 
-      final SongDatabaseStatus status = await createService(okClient())
-          .loadStatus();
+      final SongDatabaseStatus status = await createService(okClient(),
+          blobStore: store).loadStatus();
       final SongDbLastOperation? op = status.lastOperation;
       expect(op!.kind, SongDbOperationKind.update);
       expect(op.outcome, SongDbOperationOutcome.failure);
@@ -218,13 +175,13 @@ void main() {
     });
 
     test('URL 未設定のスキップも記録する', () async {
-      final SongDbUpdateResult result = await createService(okClient())
-          .updateFromUrl('');
+      final MemoryBlobStore store = MemoryBlobStore();
+      final SongDbUpdateResult result = await createService(okClient(),
+          blobStore: store).updateFromUrl('');
       expect(result.status, SongDbUpdateStatus.skippedNoUrl);
 
-      final SongDbLastOperation? op = (await createService(
-        okClient(),
-      ).loadStatus()).lastOperation;
+      final SongDbLastOperation? op = (await createService(okClient(),
+          blobStore: store).loadStatus()).lastOperation;
       expect(op!.kind, SongDbOperationKind.update);
       // WHY: スキップは失敗ではないため、UI が「失敗」と表示しないよう
       // skipped として区別して保存されることを確認する。
@@ -235,95 +192,83 @@ void main() {
     });
 
     test('upToDate でもサーバー側の収録曲数を残す', () async {
-      await createService(okClient(dbVersion: 2))
+      final MemoryBlobStore store = MemoryBlobStore();
+      await createService(okClient(dbVersion: 2), blobStore: store)
           .updateFromUrl('https://x.test/db.json');
       final SongDbUpdateResult second = await createService(
         okClient(dbVersion: 2),
+        blobStore: store,
       ).updateFromUrl('https://x.test/db.json');
       expect(second.status, SongDbUpdateStatus.upToDate);
 
-      final SongDbLastOperation? op = (await createService(
-        okClient(),
-      ).loadStatus()).lastOperation;
+      final SongDbLastOperation? op = (await createService(okClient(),
+          blobStore: store).loadStatus()).lastOperation;
       expect(op!.outcome, SongDbOperationOutcome.success);
       expect(op.songCount, 2);
       expect(op.dbVersion, 2);
     });
 
     test('importAdditionalJson 成功 → import 種別・取り込み元 basename', () async {
-      final Directory sourceDir = await Directory.systemTemp.createTemp(
-        'songdb_status_src',
-      );
-      try {
-        final File sourceFile = File(
-          '${sourceDir.path}/additional_source.json',
-        );
-        await sourceFile.writeAsString(
-          jsonEncode(<String, dynamic>{
-            'schemaVersion': 1,
-            'sourceType': 'localAdditional',
-            'songs': <Map<String, dynamic>>[
-              <String, dynamic>{'id': 'extra-1', 'title': '追加曲'},
-            ],
-          }),
-        );
+      final MemoryBlobStore store = MemoryBlobStore();
+      final SongImportResult result = await createService(okClient(),
+          blobStore: store).importAdditionalJson(
+            utf8.encode(jsonEncode(<String, dynamic>{
+              'schemaVersion': 1,
+              'sourceType': 'localAdditional',
+              'songs': <Map<String, dynamic>>[
+                <String, dynamic>{'id': 'extra-1', 'title': '追加曲'},
+              ],
+            })),
+            fileName: 'additional_source.json',
+          );
+      expect(result.success, isTrue);
 
-        final SongImportResult result = await createService(okClient())
-            .importAdditionalJson(
-              sourceFile.readAsBytesSync(),
-              fileName: sourceFile.path.split(RegExp(r'[\\/]')).last,
-            );
-        expect(result.success, isTrue);
-
-        final SongDbLastOperation? op = (await createService(
-          okClient(),
-        ).loadStatus()).lastOperation;
-        expect(op!.kind, SongDbOperationKind.importAdditional);
-        expect(op.outcome, SongDbOperationOutcome.success);
-        expect(op.songCount, 1);
-        // WHY: dbVersion はメイン DB 専用の概念のため import では null。
-        expect(op.dbVersion, isNull);
-        expect(op.sourceFileName, 'additional_source.json');
-      } finally {
-        await sourceDir.delete(recursive: true);
-      }
+      final SongDbLastOperation? op = (await createService(okClient(),
+          blobStore: store).loadStatus()).lastOperation;
+      expect(op!.kind, SongDbOperationKind.importAdditional);
+      expect(op.outcome, SongDbOperationOutcome.success);
+      expect(op.songCount, 1);
+      // WHY: dbVersion はメイン DB 専用の概念のため import では null。
+      expect(op.dbVersion, isNull);
+      expect(op.sourceFileName, 'additional_source.json');
     });
 
     test('旧形式（succeeded キーのみ）の記録は読まずに null を返す', () async {
-      await settingsFile().parent.create(recursive: true);
-      // WHY: 旧形式は outcome を持たないため解釈できない。表示専用の補助情報
-      // なので、例外にせず「記録なし」として黙って捨てる。
-      await settingsFile().writeAsString(
-        jsonEncode(<String, dynamic>{
-          'distributionUrl': 'https://legacy.test/db.json',
-          'lastOperation': <String, dynamic>{
-            'kind': 'update',
-            'succeeded': true,
-            'at': '2026-11-24T12:34:56.000Z',
-            'message': null,
-            'songCount': 2,
-            'sourceFileName': null,
-          },
-        }),
+      final MemoryBlobStore store = MemoryBlobStore();
+      await blobStoreOf(createService(okClient(), blobStore: store)).write(
+        SongDbPaths.settingsRelativePath,
+        utf8.encode(
+          jsonEncode(<String, dynamic>{
+            'distributionUrl': 'https://legacy.test/db.json',
+            'lastOperation': <String, dynamic>{
+              'kind': 'update',
+              'succeeded': true,
+              'at': '2026-11-24T12:34:56.000Z',
+              'message': null,
+              'songCount': 2,
+              'sourceFileName': null,
+            },
+          }),
+        ),
       );
 
-      final SongDatabaseStatus status = await createService(okClient())
-          .loadStatus();
+      final SongDatabaseStatus status = await createService(okClient(),
+          blobStore: store).loadStatus();
       expect(status.lastOperation, isNull);
       expect(status.distributionUrl, 'https://legacy.test/db.json');
     });
 
     test('importAdditionalJson 失敗も記録する', () async {
-      final SongImportResult result = await createService(okClient())
-          .importAdditionalJson(
+      final MemoryBlobStore store = MemoryBlobStore();
+      final SongImportResult result = await createService(okClient(),
+          blobStore: store).importAdditionalJson(
             Uint8List(0),
             fileName: 'missing.json',
           );
       expect(result.success, isFalse);
 
-      final SongDbLastOperation? op = (await createService(
-        okClient(),
-      ).loadStatus()).lastOperation;
+      final SongDbLastOperation? op = (await createService(okClient(),
+          blobStore: store).loadStatus()).lastOperation;
       expect(op!.kind, SongDbOperationKind.importAdditional);
       expect(op.outcome, SongDbOperationOutcome.failure);
       expect(op.sourceFileName, 'missing.json');
@@ -333,48 +278,64 @@ void main() {
 
   group('settings.json の後方互換', () {
     test('URL を保存しても既存の最終操作記録が消えない', () async {
-      await createService(okClient()).updateFromUrl('https://x.test/db.json');
-      await createService(okClient())
+      final MemoryBlobStore store = MemoryBlobStore();
+      await createService(okClient(), blobStore: store)
+          .updateFromUrl('https://x.test/db.json');
+      await createService(okClient(), blobStore: store)
           .saveDistributionUrl('https://x.test/new.json');
 
-      final SongDatabaseStatus status = await createService(okClient())
-          .loadStatus();
+      final SongDatabaseStatus status = await createService(okClient(),
+          blobStore: store).loadStatus();
       expect(status.distributionUrl, 'https://x.test/new.json');
       expect(status.lastOperation, isNotNull);
       expect(status.lastOperation!.kind, SongDbOperationKind.update);
     });
 
     test('未知の設定キーを保持する（read-modify-write）', () async {
-      await settingsFile().parent.create(recursive: true);
-      await settingsFile().writeAsString(
-        jsonEncode(<String, dynamic>{
-          'distributionUrl': 'https://keep.test/db.json',
-          'futureKey': 42,
-        }),
+      final MemoryBlobStore store = MemoryBlobStore();
+      await blobStoreOf(createService(okClient(), blobStore: store)).write(
+        SongDbPaths.settingsRelativePath,
+        utf8.encode(
+          jsonEncode(<String, dynamic>{
+            'distributionUrl': 'https://keep.test/db.json',
+            'futureKey': 42,
+          }),
+        ),
       );
 
-      await createService(okClient()).updateFromUrl('https://x.test/db.json');
+      await createService(okClient(), blobStore: store)
+          .updateFromUrl('https://x.test/db.json');
 
-      final dynamic saved = jsonDecode(await settingsFile().readAsString());
+      final dynamic saved = jsonDecode(
+        utf8.decode(
+          await blobStoreOf(createService(okClient(), blobStore: store)).read(
+            SongDbPaths.settingsRelativePath,
+          ) as Uint8List,
+        ),
+      );
       expect(saved['distributionUrl'], 'https://keep.test/db.json');
       expect(saved['futureKey'], 42);
       expect(saved['lastOperation'], isNotNull);
     });
 
     test('既存ユーザーの distributionUrl をそのまま読める（回帰）', () async {
-      await settingsFile().parent.create(recursive: true);
-      await settingsFile().writeAsString(
-        jsonEncode(<String, String>{
-          'distributionUrl': 'https://legacy.test/db.json',
-        }),
+      final MemoryBlobStore store = MemoryBlobStore();
+      await blobStoreOf(createService(okClient(), blobStore: store)).write(
+        SongDbPaths.settingsRelativePath,
+        utf8.encode(
+          jsonEncode(<String, String>{
+            'distributionUrl': 'https://legacy.test/db.json',
+          }),
+        ),
       );
 
       expect(
-        await createService(okClient()).loadDistributionUrl(),
+        await createService(okClient(), blobStore: store).loadDistributionUrl(),
         'https://legacy.test/db.json',
       );
       expect(
-        (await createService(okClient()).loadStatus()).distributionUrl,
+        (await createService(okClient(), blobStore: store).loadStatus())
+            .distributionUrl,
         'https://legacy.test/db.json',
       );
     });
