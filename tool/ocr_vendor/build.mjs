@@ -35,6 +35,37 @@ const entryPath = join(here, '.entry.mjs');
 const WASM_NAME = 'ort-wasm-simd-threaded.wasm';
 
 /**
+ * 削除対象は「このスクリプトが作る生成物」だけ。outDir ごと消してはならない。
+ *
+ * WHY: web/ocr_vendor/models/ は外部から取得した**入力**であって、生成物ではない。
+ * outDir を丸ごと rmSync すると毎回モデルまで消え、ローカルで OCR を試すたびに
+ * 20 MiB 超を再取得することになる（実際に OCR-B1/B2 の検証で 3 回踏んだ）。
+ * 「models/ を残す」と名指しで除外するのではなく、「消すもの＝生成物」を明示する。
+ * 逆（残す側を列挙）にすると、将来 web/ocr_vendor/ に別の入力物が増えたとき同じ事故が起きる。
+ */
+const GENERATED_ENTRIES = ['paddleocr.bundle.js', 'assets', 'licenses'];
+
+/** wasm は名前が変わっても（simd / jsep / jspi / asyncify）古いものを残さない。 */
+const GENERATED_WASM_PATTERN = /^ort-wasm-.*\.wasm$/;
+
+function isGeneratedEntry(name) {
+  return GENERATED_ENTRIES.includes(name) || GENERATED_WASM_PATTERN.test(name);
+}
+
+/** 生成物だけを消す。outDir 自体と入力物（models/ など）は残す。 */
+function cleanGeneratedArtifacts() {
+  if (!existsSync(outDir)) {
+    return;
+  }
+  for (const entry of readdirSync(outDir, { withFileTypes: true })) {
+    if (!isGeneratedEntry(entry.name)) {
+      continue;
+    }
+    rmSync(join(outDir, entry.name), { recursive: true, force: true });
+  }
+}
+
+/**
  * ワーカーは ONNX Runtime Web を内包済みで、版は「ONNX Runtime Web v1.24.3」と書かれている。
  * wasm は JS 側の糊と版が一致しないと実行時に落ちるため、package.json で 1.24.3 に固定する。
  * ここでは固定が外れていないかを実際に突き合わせて落とす（37 MiB を無駄に配らないため）。
@@ -85,7 +116,7 @@ function ensureDependencies() {
 }
 
 async function bundle() {
-  rmSync(outDir, { recursive: true, force: true });
+  cleanGeneratedArtifacts();
   mkdirSync(join(outDir, 'assets'), { recursive: true });
   writeFileSync(entryPath, "export * from '@paddleocr/paddleocr-js';\n", 'utf8');
   log('バンドル: esbuild 実行中...');
@@ -209,7 +240,18 @@ function report() {
       files.push([`${prefix}${entry.name}`, sizeOf(full)]);
     }
   };
-  walk(outDir, '');
+  // 配布物の一覧は生成物だけ。入力物（models/ など）は配らないので数えない。
+  // 数えてしまうと合計が「配布サイズ」ではなく「ディレクトリの中身ぜんぶ」を意味してしまう。
+  for (const entry of readdirSync(outDir, { withFileTypes: true })) {
+    if (!isGeneratedEntry(entry.name)) {
+      continue;
+    }
+    if (entry.isDirectory()) {
+      walk(join(outDir, entry.name), `${entry.name}/`);
+      continue;
+    }
+    files.push([entry.name, sizeOf(join(outDir, entry.name))]);
+  }
 
   let total = 0;
   for (const [name, bytes] of files.sort((a, b) => b[1] - a[1])) {
