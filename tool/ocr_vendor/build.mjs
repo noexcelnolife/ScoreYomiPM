@@ -24,6 +24,7 @@ import {
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildSync } from 'esbuild';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..');
@@ -90,24 +91,24 @@ function bundle() {
   writeFileSync(entryPath, "export * from '@paddleocr/paddleocr-js';\n", 'utf8');
   log('バンドル: esbuild 実行中...');
   try {
-    execFileSync(
-      process.execPath,
-      [
-        join(here, 'node_modules', 'esbuild', 'bin', 'esbuild'),
-        entryPath,
-        '--bundle',
-        '--format=esm',
-        '--minify',
-        '--target=es2020',
-        // opencv-js は Emscripten の Node 用シェルで require("fs")/require("path") を含む。
-        // package.json に browser フィールドが無いため解決に失敗して停止する。
-        // 当該分岐は ENVIRONMENT_IS_NODE のときだけ通るので、ブラウザでは到達しない。
-        '--external:fs',
-        '--external:path',
-        `--outfile=${bundlePath}`,
-      ],
-      { cwd: here, stdio: 'inherit' },
-    );
+    // CLI（node_modules/esbuild/bin/esbuild）を node で起動してはならない。
+    // WHY: このパスは Windows では JS のシムだが、Linux/macOS ではプラットフォーム用の
+    // 実行バイナリ本体（ELF / Mach-O）になる。node が JS として読もうとして
+    // `SyntaxError: Invalid or unexpected token` で落ちる（GitHub Actions で実際に発生）。
+    // JS API ならプラットフォーム別バイナリの解決を esbuild 自身が行うため、どの OS でも同じ。
+    buildSync({
+      entryPoints: [entryPath],
+      bundle: true,
+      format: 'esm',
+      minify: true,
+      target: 'es2020',
+      // opencv-js は Emscripten の Node 用シェルで require("fs")/require("path") を含む。
+      // package.json に browser フィールドが無いため解決に失敗して停止する。
+      // 当該分岐は ENVIRONMENT_IS_NODE のときだけ通るので、ブラウザでは到達しない。
+      external: ['fs', 'path'],
+      outfile: bundlePath,
+      logLevel: 'info',
+    });
   } finally {
     rmSync(entryPath, { force: true });
   }
